@@ -1,0 +1,27 @@
+dual_optimistic_l2
+Copyright 2024 jazzcake
+
+This product includes software developed by third parties.
+The following notices are required by the licenses of those components.
+
+================================================================================
+SUI / Mysticeti Consensus
+  Source:  https://github.com/MystenLabs/sui
+  License: Apache License, Version 2.0
+  Copyright 2022 Mysten Labs, Inc.
+
+  This software uses the Mysticeti DAG-based consensus protocol extracted
+  from the SUI repository (git submodule: extern/sui).
+  No source files have been modified from the original.
+
+================================================================================
+REVM — Rust Ethereum Virtual Machine
+  Source:  https://github.com/bluealloy/revm
+  License: MIT License
+  Copyright (c) 2021-2026 draganrakita
+
+  This software uses REVM as a parallel execution backend
+  (git submodule: extern/revm).
+  No source files have been modified from the original.
+
+================================================================================
