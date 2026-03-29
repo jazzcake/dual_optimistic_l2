@@ -1,6 +1,6 @@
 # Phase 3: Mysticeti 합의 추출
 
-**상태**: ⏳ 대기
+**상태**: 🔄 3-A 완료 → 3-B 대기
 **목표**: SUI 저장소에서 Mysticeti DAG 합의에 필요한 최소한의 코드를 추출하여 `crates/consensus`에 이식한다. SUI 전용 의존성 없이 독립 컴파일되어야 한다.
 
 ---
@@ -68,17 +68,19 @@ rand         = "0.8"
 
 ### Phase 3-A 작업 목록
 
-- [ ] `types.rs` 이식 + 출처 표기 + DbC assert 추가
-- [ ] `committee.rs` 이식 + `fastcrypto` → `sha3` 교체
-- [ ] `stake_aggregator.rs` 이식 + DbC assert 추가
-- [ ] `threshold_clock.rs` 이식 + 메트릭 제거
-- [ ] `dag_state.rs` 이식 + Store → in-memory
-- [ ] `block_manager.rs` 이식
-- [ ] `base_committer.rs` 이식 + LeaderSchedule → round-robin
-- [ ] `universal_committer.rs` 이식
-- [ ] `linearizer.rs` 이식 + fast-path 필드 제거
-- [ ] `Cargo.toml` 의존성 정리
-- [ ] `cargo build -p consensus` 통과 확인
+- [x] `types.rs` 이식 + 출처 표기 + DbC assert 추가
+- [x] `committee.rs` 이식 + `fastcrypto` → `sha3` 교체
+- [x] `stake_aggregator.rs` 이식 + DbC assert 추가
+- [x] `threshold_clock.rs` 이식 + 메트릭 제거
+- [x] `dag_state.rs` 이식 + Store → in-memory
+- [x] `block_manager.rs` 이식
+- [x] `base_committer.rs` 이식 + LeaderSchedule → round-robin
+- [x] `universal_committer.rs` 이식
+- [x] `linearizer.rs` 이식 + fast-path 필드 제거
+- [x] `context.rs` 신규 작성 (경량 Context: own_index + committee)
+- [x] `commit.rs` 이식 (CommittedSubDag, LeaderStatus, DecidedLeader)
+- [x] `Cargo.toml` 의존성 정리
+- [x] `cargo build -p consensus` 통과 확인
 
 ### Phase 3-A 완료 기준
 
@@ -133,7 +135,23 @@ accept_block(block at voting_round R+1):
 
 ## 실행 계획 (Execution Plan)
 
-> 3-A 계획은 Phase 3-A 시작 전, 3-B 계획은 Phase 3-B 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+### Phase 3-A 실행 계획 (완료)
+
+| 순번 | 파일 | 상태 |
+|------|------|------|
+| 1 | `committee.rs` | ✅ SUI-dep 제거, stake/quorum 순수 구현 |
+| 2 | `types.rs` | ✅ sha3 digest, 단일 Block 구조, VerifiedBlock |
+| 3 | `commit.rs` | ✅ CommittedSubDag, LeaderStatus, DecidedLeader |
+| 4 | `context.rs` | ✅ 신규 작성 (own_index + Arc<Committee>) |
+| 5 | `stake_aggregator.rs` | ✅ 그대로, DbC assert 추가 |
+| 6 | `threshold_clock.rs` | ✅ prometheus 메트릭 제거 |
+| 7 | `dag_state.rs` | ✅ Store trait → BTreeMap in-memory |
+| 8 | `block_manager.rs` | ✅ monitored_scope/metrics 제거 |
+| 9 | `base_committer.rs` | ✅ LeaderSchedule → round % size() |
+| 10 | `universal_committer.rs` | ✅ protocol_config 제거, 단순 빌더 |
+| 11 | `linearizer.rs` | ✅ TrustedCommit/bcs 제거, 단순 CommittedSubDag |
+
+> 3-B 계획은 Phase 3-B 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
 
 ---
 

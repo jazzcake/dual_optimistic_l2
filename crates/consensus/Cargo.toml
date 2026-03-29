@@ -4,5 +4,10 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-shared = { workspace = true }
-tokio = { workspace = true }
+shared       = { workspace = true }
+tokio        = { workspace = true }
+parking_lot  = "0.12"
+sha3         = "0.10"
+rand         = { workspace = true }
+serde        = { version = "1.0", features = ["derive"] }
+tracing      = "0.1"

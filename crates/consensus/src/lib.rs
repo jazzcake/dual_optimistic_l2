@@ -1,42 +1,60 @@
 //! Consensus crate: Mysticeti DAG wrapper.
 //!
 //! Responsibilities:
-//! - Wrap Mysticeti consensus engine (extern/sui submodule)
+//! - Implement Mysticeti consensus engine (extracted from extern/sui, SUI-dep-free)
 //! - Detect SoftCommit (2Δ wave leader) and HardCommit (3Δ subDAG)
 //! - Emit `ConsensusEvent` via broadcast channel
-//! - Provide `InMemoryNetworkClient` for deterministic simulation
+//! - Provide deterministic in-process simulation for testing
 
-#![allow(dead_code, unused_variables)]
+// ---------------------------------------------------------------------------
+// Phase 3-A: ported SUI modules
+// ---------------------------------------------------------------------------
+
+pub mod committee;
+pub mod context;
+pub mod types;
+pub mod commit;
+
+pub(crate) mod stake_aggregator;
+pub(crate) mod threshold_clock;
+pub mod dag_state;
+pub(crate) mod block_manager;
+pub(crate) mod base_committer;
+pub(crate) mod universal_committer;
+pub mod linearizer;
+
+// ---------------------------------------------------------------------------
+// Public re-exports (crate boundary API)
+// ---------------------------------------------------------------------------
+
+pub use committee::{Authority, AuthorityIndex, Committee, Epoch, Stake, make_test_committee};
+pub use context::Context;
+pub use types::{
+    Block, BlockDigest, BlockRef, BlockTimestampMs, Round, Slot, TestBlock, Transaction,
+    VerifiedBlock, DIGEST_LENGTH, GENESIS_ROUND, genesis_blocks,
+};
+pub use commit::{CommitDigest, CommitIndex, CommitRef, CommittedSubDag};
+pub use dag_state::DagState;
+pub use linearizer::Linearizer;
+
+// ---------------------------------------------------------------------------
+// Phase 3-B stubs (ConsensusHandle interface, network simulation)
+// ---------------------------------------------------------------------------
 
 use std::{future::Future, pin::Pin, time::Duration};
 use tokio::sync::broadcast;
-use shared::{AuthorityIndex, ConsensusError, ConsensusEvent, EthSignedTx};
+use shared::{ConsensusError, ConsensusEvent, EthSignedTx};
 
-// ---------------------------------------------------------------------------
-// ConsensusHandle trait (D1: SoftCommit hook lives inside this crate)
-//
-// Boxed futures are used so the trait is dyn compatible (required by
-// SimulatedNode which stores Box<dyn ConsensusHandle>).
-// ---------------------------------------------------------------------------
-
+/// Handle to the running consensus engine.
+/// Phase 3-B will provide a `ConsensusNode` implementation.
 pub trait ConsensusHandle: Send + Sync {
-    /// Subscribe to consensus events (SoftCommit / HardCommit).
     fn event_receiver(&self) -> broadcast::Receiver<ConsensusEvent>;
-
-    /// Submit Ethereum transactions into the consensus pipeline.
     fn submit_transactions(&self, txs: Vec<EthSignedTx>) -> Result<(), ConsensusError>;
-
-    /// Start the consensus engine (spawns internal tasks).
     fn start(&self) -> Pin<Box<dyn Future<Output = Result<(), ConsensusError>> + Send + '_>>;
-
-    /// Gracefully shut down the consensus engine.
     fn stop(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
-// ---------------------------------------------------------------------------
-// LatencyModel: pluggable network delay for simulation
-// ---------------------------------------------------------------------------
-
+/// Pluggable network-delay model for simulation.
 pub trait LatencyModel: Send + Sync {
     fn delay(&self) -> Duration;
 }
@@ -54,20 +72,15 @@ pub struct UniformLatency {
 }
 impl LatencyModel for UniformLatency {
     fn delay(&self) -> Duration {
-        // Phase 3: implement random delay within [min, max]
-        todo!()
+        // Phase 3-B: implement random delay within [min, max]
+        todo!("UniformLatency::delay is implemented in Phase 3-B")
     }
 }
 
-// ---------------------------------------------------------------------------
-// InMemoryNetworkClient: in-process ValidatorNetworkClient for simulation
-// ---------------------------------------------------------------------------
-
-/// In-process mock network client.
-/// Phase 3 will implement the actual `ValidatorNetworkClient` trait from SUI.
+/// In-process mock network client for simulation.
+/// Phase 3-B implements the full SimulatedNetwork on top of this.
 pub struct InMemoryNetworkClient {
-    // Phase 3: HashMap<AuthorityIndex, mpsc::Sender<NetworkMessage>>
-    _peers: std::marker::PhantomData<AuthorityIndex>,
+    _peers: std::marker::PhantomData<shared::AuthorityIndex>,
     _latency: Box<dyn LatencyModel>,
 }
 
