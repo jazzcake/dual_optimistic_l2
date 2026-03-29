@@ -1,33 +1,31 @@
 //! Shared domain types crossing crate boundaries.
 //!
-//! Placeholder primitive types (Address, U256, TxHash) will be replaced
-//! with alloy-primitives equivalents in Phase 2.
+//! Primitive types (Address, U256, B256, AccountInfo, StorageKey, StorageValue)
+//! are re-exported from revm-primitives / revm-state.
+//! Domain types specific to this project are defined here.
 
 #![allow(dead_code)]
 
-use std::collections::HashMap;
-
 // ---------------------------------------------------------------------------
-// Primitive placeholders (Phase 2: replace with alloy-primitives)
+// Re-export revm primitive types
 // ---------------------------------------------------------------------------
 
+pub use revm_primitives::{Address, B256, StorageKey, StorageValue, U256};
+pub use revm_state::AccountInfo;
+
+// ---------------------------------------------------------------------------
+// Stable project-level aliases
+// ---------------------------------------------------------------------------
+
+/// Round number in the Mysticeti DAG.
 pub type Round = u64;
 pub type AuthorityIndex = u64;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Address(pub [u8; 20]);
+/// 32-byte transaction hash (alias for B256).
+pub type TxHash = B256;
 
-/// 256-bit value (storage slot key or token amount).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct U256(pub [u64; 4]);
-
-/// 32-byte transaction hash.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TxHash(pub [u8; 32]);
-
-/// 32-byte block digest.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct BlockDigest(pub [u8; 32]);
+/// 32-byte block digest (alias for B256).
+pub type BlockDigest = B256;
 
 /// Raw EIP-2718 encoded Ethereum transaction.
 #[derive(Debug, Clone)]
@@ -98,16 +96,17 @@ pub struct StateDiff {
     pub round: Round,
     pub commit_index: u64,
     pub is_optimistic: bool,
-    pub changes: HashMap<Address, AccountDiff>,
+    pub changes: std::collections::HashMap<Address, AccountDiff>,
 }
 
+/// Per-account change set produced by a single transaction.
 #[derive(Debug, Clone, Default)]
 pub struct AccountDiff {
     pub balance: Option<U256>,
     pub nonce: Option<u64>,
     pub code: Option<Vec<u8>>,
-    /// Slot-level write set (D5: storage slot granularity).
-    pub storage: HashMap<U256, U256>,
+    /// Slot-level write set (storage slot granularity).
+    pub storage: std::collections::HashMap<StorageKey, StorageValue>,
 }
 
 // ---------------------------------------------------------------------------
@@ -145,14 +144,14 @@ pub enum BackpressureSignal {
 }
 
 // ---------------------------------------------------------------------------
-// R/W conflict tracking types (D5: slot granularity)
+// R/W conflict tracking types (slot granularity)
 // ---------------------------------------------------------------------------
 
-pub type ReadSet = std::collections::HashSet<(Address, U256)>;
-pub type WriteSet = HashMap<(Address, U256), U256>;
+pub type ReadSet = std::collections::HashSet<(Address, StorageKey)>;
+pub type WriteSet = std::collections::HashMap<(Address, StorageKey), StorageValue>;
 
 // ---------------------------------------------------------------------------
-// Error types (stubs)
+// Error types
 // ---------------------------------------------------------------------------
 
 #[derive(Debug)]

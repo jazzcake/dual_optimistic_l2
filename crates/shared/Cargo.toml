@@ -2,3 +2,8 @@
 name = "shared"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+revm-primitives         = { path = "../../extern/revm/crates/primitives" }
+revm-state              = { path = "../../extern/revm/crates/state" }
+revm-database-interface = { path = "../../extern/revm/crates/database/interface" }

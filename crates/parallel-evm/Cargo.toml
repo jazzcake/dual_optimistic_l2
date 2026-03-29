@@ -5,5 +5,6 @@ edition.workspace = true
 
 [dependencies]
 shared = { workspace = true }
-shadow-state = { workspace = true }
-tokio = { workspace = true }
+shadow-state              = { workspace = true }
+revm-database-interface   = { path = "../../extern/revm/crates/database/interface" }
+tokio                     = { workspace = true }

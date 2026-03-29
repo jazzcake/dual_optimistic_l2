@@ -11,57 +11,57 @@ Dependency Notification MVCC 방식. 합의/스케줄러 없이 독립적으로 
 ## 작업 목록
 
 ### Step 1: shared 타입 교체
-- [ ] `shared` crate에 revm-primitives / revm-state path 의존성 추가
-- [ ] placeholder 타입을 revm 실제 타입으로 교체 (Address, U256, B256, AccountInfo, StorageKey, StorageValue)
-- [ ] `cargo check --workspace` 통과
+- [x] `shared` crate에 revm-primitives / revm-state path 의존성 추가
+- [x] placeholder 타입을 revm 실제 타입으로 교체 (Address, U256, B256, AccountInfo, StorageKey, StorageValue)
+- [x] `cargo check --workspace` 통과
 
 ### Step 2: MVDS 핵심 자료구조
-- [ ] `VersionedValue` enum (`Data` / `Pending` / `Absent`)
-- [ ] `SlotVersions` 구조체 (versions BTreeMap + readers 의존성 목록)
-- [ ] `LayerStatus` enum (`Speculative` / `PendingCommit`)
-- [ ] `RoundLayer` 구조체 (slot_versions + account_versions + pending_txs)
-- [ ] `ShadowDb<DB>` 제네릭 구조체 (layers + canonical Mutex + current_tx AtomicUsize)
+- [x] `VersionedValue` enum (`Data` / `Pending` / `Absent`)
+- [x] `SlotVersions` 구조체 (versions BTreeMap + readers 의존성 목록)
+- [x] `LayerStatus` enum (`Speculative` / `PendingCommit`)
+- [x] `RoundLayer` 구조체 (slot_versions + account_versions + pending_txs + tx_reads)
+- [x] `ShadowDb<DB>` 제네릭 구조체 (layers + canonical Mutex + current_tx AtomicUsize + current_commit_index AtomicU64)
 
 ### Step 3: DatabaseRef 구현 (READLAST)
-- [ ] `storage_ref` — READLAST: TxIndex < current_tx 최대 버전, Pending 폴백, readers 기록
-- [ ] `basic_ref` — account_versions 동일 탐색 → canonical 위임
-- [ ] `code_by_hash_ref` / `block_hash_ref` — canonical 위임
+- [x] `storage_ref` — READLAST: TxIndex < current_tx 최대 버전, Pending 폴백, readers 기록
+- [x] `basic_ref` — account_versions 동일 탐색 → canonical 위임
+- [x] `code_by_hash_ref` / `block_hash_ref` — canonical 위임
 
 ### Step 4: Dependency Notification API
-- [ ] `record_tx_execution` — REVM EvmState → SlotVersions 기록 (coinbase 슬롯 제외)
-- [ ] `abort_tx` — Pending 전환 + readers drain → 연쇄 재실행 목록 반환
-- [ ] `commit_tx_execution` — Data 확정 + readers 초기화
-- [ ] `validate_round` — VALIDAFTER 불변 조건 검증, 추가 재실행 목록 반환
+- [x] `record_tx_execution` — REVM EvmState → SlotVersions 기록 (coinbase 슬롯 제외)
+- [x] `abort_tx` — Pending 전환 + readers drain → 연쇄 재실행 목록 반환
+- [x] `commit_tx_execution` — Data 확정 + readers 초기화
+- [x] `validate_round` — VALIDAFTER 불변 조건 검증, 추가 재실행 목록 반환
 
 ### Step 5: Cascade Read Invalidation
-- [ ] `cascade_invalidate` — 변경 슬롯 기반 N 이후 Speculative 레이어 무효화
-- [ ] PendingCommit 레이어 cascade 제외
-- [ ] 무효화 시 slot_versions / account_versions 제거, pending_txs 보존
+- [x] `cascade_invalidate` — 변경 슬롯 기반 N 이후 Speculative 레이어 무효화
+- [x] PendingCommit 레이어 cascade 제외
+- [x] 무효화 시 slot_versions / account_versions / tx_reads 제거, pending_txs 보존
 
 ### Step 6: Two-Phase Commit 파이프라인
-- [ ] `stage_commit` — PendingCommit 전환 + CommitHandle 반환
-- [ ] `finalize_commit` — canonical write + 레이어 Drop
-- [ ] commit_index 순서 강제 (N 미완료 시 N+1 finalize 차단)
-- [ ] PendingCommit 슬롯 가시성 — 이후 Speculative 라운드 읽기 기준 포함
+- [x] `stage_commit` — PendingCommit 전환 + CommitHandle 반환
+- [x] `finalize_commit` — canonical write + 레이어 Drop
+- [x] commit_index 순서 강제 (N 미완료 시 N+1 finalize 차단)
+- [x] PendingCommit 슬롯 가시성 — 이후 Speculative 라운드 읽기 기준 포함
 
 ### Step 7: 테스트 (시나리오 기반, 총 17개)
-- [ ] `test_readlast_basic`
-- [ ] `test_readlast_skip_to_latest`
-- [ ] `test_readlast_no_writer_falls_to_canonical`
-- [ ] `test_pending_fallback_to_prior_data`
-- [ ] `test_pending_fallback_to_canonical`
-- [ ] `test_abort_tx_sets_pending_and_drains_readers`
-- [ ] `test_abort_tx_multiple_readers`
-- [ ] `test_abort_tx_chain`
-- [ ] `test_commit_tx_restores_data_and_clears_readers`
-- [ ] `test_validate_round_detects_stale_reads`
-- [ ] `test_cascade_invalidate_clears_slot_versions`
-- [ ] `test_cascade_preserves_pending_txs`
-- [ ] `test_pending_commit_not_cascade_invalidated`
-- [ ] `test_pending_commit_visible_to_next_round`
-- [ ] `test_stage_commit_produces_correct_handle`
-- [ ] `test_finalize_commit_writes_canonical`
-- [ ] `test_finalize_ordering_enforced`
+- [x] `test_readlast_basic`
+- [x] `test_readlast_skip_to_latest`
+- [x] `test_readlast_no_writer_falls_to_canonical`
+- [x] `test_pending_fallback_to_prior_data`
+- [x] `test_pending_fallback_to_canonical`
+- [x] `test_abort_tx_sets_pending_and_drains_readers`
+- [x] `test_abort_tx_multiple_readers`
+- [x] `test_abort_tx_chain`
+- [x] `test_commit_tx_restores_data_and_clears_readers`
+- [x] `test_validate_round_detects_stale_reads`
+- [x] `test_cascade_invalidate_clears_slot_versions`
+- [x] `test_cascade_preserves_pending_txs`
+- [x] `test_pending_commit_not_cascade_invalidated`
+- [x] `test_pending_commit_visible_to_next_round`
+- [x] `test_stage_commit_produces_correct_handle`
+- [x] `test_finalize_commit_writes_canonical`
+- [x] `test_finalize_ordering_enforced`
 
 ---
 
@@ -610,20 +610,20 @@ where DB: DatabaseRef + DatabaseCommit,
 cargo test -p shadow-state
 ```
 
-- [ ] `test_readlast_basic`
-- [ ] `test_readlast_skip_to_latest`
-- [ ] `test_readlast_no_writer_falls_to_canonical`
-- [ ] `test_pending_fallback_to_prior_data`
-- [ ] `test_pending_fallback_to_canonical`
-- [ ] `test_abort_tx_sets_pending_and_drains_readers`
-- [ ] `test_abort_tx_multiple_readers`
-- [ ] `test_abort_tx_chain`
-- [ ] `test_commit_tx_restores_data_and_clears_readers`
-- [ ] `test_validate_round_detects_stale_reads`
-- [ ] `test_cascade_invalidate_clears_slot_versions`
-- [ ] `test_cascade_preserves_pending_txs`
-- [ ] `test_pending_commit_not_cascade_invalidated`
-- [ ] `test_pending_commit_visible_to_next_round`
-- [ ] `test_stage_commit_produces_correct_handle`
-- [ ] `test_finalize_commit_writes_canonical`
-- [ ] `test_finalize_ordering_enforced`
+- [x] `test_readlast_basic`
+- [x] `test_readlast_skip_to_latest`
+- [x] `test_readlast_no_writer_falls_to_canonical`
+- [x] `test_pending_fallback_to_prior_data`
+- [x] `test_pending_fallback_to_canonical`
+- [x] `test_abort_tx_sets_pending_and_drains_readers`
+- [x] `test_abort_tx_multiple_readers`
+- [x] `test_abort_tx_chain`
+- [x] `test_commit_tx_restores_data_and_clears_readers`
+- [x] `test_validate_round_detects_stale_reads`
+- [x] `test_cascade_invalidate_clears_slot_versions`
+- [x] `test_cascade_preserves_pending_txs`
+- [x] `test_pending_commit_not_cascade_invalidated`
+- [x] `test_pending_commit_visible_to_next_round`
+- [x] `test_stage_commit_produces_correct_handle`
+- [x] `test_finalize_commit_writes_canonical`
+- [x] `test_finalize_ordering_enforced`

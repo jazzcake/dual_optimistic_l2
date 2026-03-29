@@ -21,7 +21,7 @@ pub trait ParallelExecutor: Send + Sync {
     fn execute(
         &self,
         batch: TxBatch,
-        db: Arc<ShadowDb>,
+        db: Arc<ShadowDb<revm_database_interface::EmptyDB>>,
     ) -> impl Future<Output = Result<RoundExecutionResult, shared::ExecutorError>> + Send;
 }
 
@@ -34,13 +34,13 @@ pub trait CommitWrapper: Send + Sync {
     fn on_hard_commit(
         &self,
         result: RoundExecutionResult,
-        db: Arc<ShadowDb>,
+        db: Arc<ShadowDb<revm_database_interface::EmptyDB>>,
     ) -> impl Future<Output = Result<(), CommitError>> + Send;
 
     /// Discard a speculative diff after conflict resolution.
     fn on_conflict_discard(
         &self,
         commit_index: u64,
-        db: Arc<ShadowDb>,
+        db: Arc<ShadowDb<revm_database_interface::EmptyDB>>,
     ) -> impl Future<Output = ()> + Send;
 }
