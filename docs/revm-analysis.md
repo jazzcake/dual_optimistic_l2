@@ -153,50 +153,184 @@ Database (원장 DB, 영구 저장)
 
 ---
 
-## 6. Shadow State 구현 전략 (Phase 2 입력)
+## 6. Shadow State 구현 전략 (Phase 1 확정 사항 반영)
 
-### 구현할 것
+Phase 1 인터페이스 설계에서 아래 사항이 확정됐다.
 
-```
-ShadowDb
-  implements: Database (+ DatabaseRef for Arc sharing)
-
-내부 구조:
-  - main_db: Arc<dyn DatabaseRef>       ← 원장 DB (읽기 전용)
-  - versions: BTreeMap<TxId, TxState>   ← 트랜잭션별 쓰기 세트
-  - read_set: HashMap<TxId, ReadSet>    ← R/W 충돌 감지용 읽기 추적
-  - write_set: HashMap<TxId, WriteSet>  ← 쓰기 추적
-```
-
-### 병렬 실행 패턴
-
-```
-round_txs = [tx0, tx1, tx2, ...]
-
-병렬:
-  thread_0: Evm::new(ShadowDb::for_tx(0, ..)).transact(tx0)
-  thread_1: Evm::new(ShadowDb::for_tx(1, ..)).transact(tx1)
-  thread_2: Evm::new(ShadowDb::for_tx(2, ..)).transact(tx2)
-
-충돌 감지:
-  ShadowDb 전체 R/W 세트 비교
-  → 충돌 tx 재실행 (의존성 순서대로 직렬 실행)
-
-HardCommit 시:
-  충돌 없으면: 모든 write_set → main_db 병합
-  충돌 있으면: round 전체 shadow 폐기 (Drop)
-```
-
-### 핵심 결정 사항 (Phase 1에서 확정)
-
-1. `ShadowDb`는 `Database` 구현 (`&mut self`) vs `DatabaseRef` 구현 (`&self`) 중 어느 것인가?
-   - 병렬 읽기를 위해 `DatabaseRef` + `WrapDatabaseRef`가 더 적합할 수 있음
-2. 충돌 감지 단위: 슬롯 단위 vs 계정 단위
-3. 재실행 전략: 충돌 tx만 직렬 재실행 vs 라운드 전체 재실행
+| 결정 | 내용 |
+|------|------|
+| D2: DatabaseRef | `&self` 기반 `DatabaseRef` + `WrapDatabaseRef` 채택. Arc 공유 가능 |
+| D5: 충돌 단위 | Storage slot 단위 `(Address, StorageKey)` |
+| 재실행 전략 | MVCC + Dependency Notification (§8 참조) |
 
 ---
 
-## 7. 체크리스트 대응
+## 7. EvmState에서 R/W Set 추출 방법
+
+REVM `transact()` 실행 후 반환되는 `ExecResultAndState.state`(`EvmState = AddressMap<Account>`)에서 슬롯별 R/W 여부를 직접 추출할 수 있다.
+
+```rust
+// 실행 후 EvmState에서 R/W set 추출
+fn extract_rw_sets(
+    state: &EvmState,
+) -> (ReadSet, WriteSet) {
+    let mut reads  = HashSet::new();
+    let mut writes = HashMap::new();
+
+    for (addr, account) in state.iter() {
+        for (slot_key, slot) in account.storage.iter() {
+            // 슬롯이 로드됐으면 = 읽음
+            reads.insert((*addr, *slot_key));
+
+            // original != present 이면 = 씀 (EvmStorageSlot::is_changed())
+            if slot.is_changed() {
+                writes.insert((*addr, *slot_key), slot.present_value);
+            }
+        }
+    }
+    (reads, writes)
+}
+```
+
+**핵심**: `EvmStorageSlot.is_changed()` = `original_value != present_value`. REVM이 이미 슬롯 단위 변경 여부를 추적하므로 별도 추적 없이 실행 후 추출 가능하다.
+
+---
+
+## 8. 병렬 실행 전략 — BlockSTM 분석 및 우리 접근
+
+### 8-1. BlockSTM 핵심 알고리즘
+
+**출처**: "Block-STM: Scaling Blockchain Execution by Turning Ordering Curse to a Performance Blessing" (Aptos Labs, PPoPP '23, arXiv:2203.06871)
+
+두 불변 조건:
+- **READLAST(k)**: TX_k는 자신보다 앞선 TX 중 가장 높은 인덱스의 버전을 읽는다
+- **VALIDAFTER(j,k)**: TX_j 재실행 시마다 TX_k의 read-set 검증 수행
+
+**MVDS (Multi-Version Data Structure)**:
+
+```
+슬롯 X:
+  BTreeMap<TxIndex, VersionedValue>
+    ├── 2 → Data(100)     ← TX_2가 씀
+    ├── 5 → ESTIMATE      ← TX_5 abort, 재실행 중
+    └── 8 → Data(200)     ← TX_8이 씀
+
+TX_6이 슬롯 X 읽기:
+  → TxIndex < 6 중 최대 = 5 (ESTIMATE)
+  → ESTIMATE 읽음 → TX_6 즉시 early abort
+```
+
+**ESTIMATE 메커니즘**:
+- TX_j abort 시 write-set을 삭제하지 않고 `ESTIMATE` 마커로 교체
+- 후속 TX가 ESTIMATE를 읽으면 즉시 early abort → 캐스케이딩 abort 방지
+- TX_j 재실행 완료 시 ESTIMATE → Data 교체
+
+### 8-2. 특허 / IP 현황
+
+| 항목 | 내용 |
+|------|------|
+| Aptos Labs 등록 특허 | 공개 DB에서 BlockSTM 관련 등록 특허 미확인 |
+| 선행 기술(prior art) | 2022년 3월 arXiv 공개 — 이후 특허 출원 어려움 |
+| 알고리즘 특허 | Alice Corp. 판결 이후 미국에서 순수 알고리즘 특허 등록 난도 높음 |
+| aptos-core 코드 | 현행 라이선스 제약 있음 (4년 후 Apache 2.0 전환). **코드 복사 금지, 독자 구현은 무방** |
+| Starknet | BlockSTM을 Rust로 직접 채택 |
+
+**결론**: 독자 구현은 법적 위험 낮음. aptos-core 코드 직접 사용은 금지.
+
+### 8-3. 타 프로젝트 비교
+
+| 프로젝트 | 방식 | ESTIMATE 유사 메커니즘 |
+|---------|------|----------------------|
+| Aptos | OCC + ESTIMATE 마커 | ESTIMATE |
+| Starknet | BlockSTM Rust 직접 채택 | ESTIMATE |
+| Polygon | BlockSTM 변형 + 블록에 DAG 메타데이터 기록 | 변형 |
+| Monad | "최대 2회 실행" 보장 + serial merge 단계 | 없음 |
+| Sei | heuristic 사전 예측 + Bloom filter | 없음 |
+| NEMO (2024) | 정상 실행 중 proactive 의존성 추출 | 없음 (직접 통보) |
+
+### 8-4. 우리 접근 — Dependency Notification MVCC
+
+ESTIMATE 없이 동일한 목표를 달성한다. NEMO (2024) 논문의 접근과 유사.
+
+**핵심 차이**:
+
+```
+BlockSTM:
+  TX_j abort → ESTIMATE 마커 배치
+  TX_k가 ESTIMATE 읽으면 → TX_k 스스로 early abort
+
+우리 (Dependency Notification):
+  TX_k가 TX_j 버전을 읽을 때 → dep_list[j].add(k) 기록
+  TX_j abort 시 → dep_list[j]의 모든 TX에 직접 재실행 통보
+  TX_j 재실행 완료 → dep_list[j] 초기화
+```
+
+**MVDS 자료구조**:
+
+```rust
+enum VersionedValue {
+    Data(StorageValue),  // 확정된 값
+    Pending,             // TX 재실행 중 (ESTIMATE 대신 — blocking 없음)
+    Absent,              // 슬롯 미존재
+}
+
+struct SlotVersions {
+    // TxIndex → 해당 TX가 쓴 값
+    versions: BTreeMap<TxIndex, VersionedValue>,
+    // writer TX → 이 버전을 읽은 reader TX들 (재실행 알림용)
+    readers: HashMap<TxIndex, Vec<TxIndex>>,
+}
+```
+
+**읽기 흐름 (READLAST 구현)**:
+
+```
+TX_k가 슬롯 X 읽기:
+  1. versions에서 TxIndex < k인 최대 항목 탐색
+  2. Data(v)   → v 반환, readers[j].add(k) 기록
+  3. Pending   → 가장 가까운 이전 Data 버전으로 폴백
+               → readers[j].add(k) 기록 (Pending 확정 시 재실행 통보 받음)
+  4. 없음      → 상위 PendingCommit 레이어 또는 canonical 탐색
+```
+
+**abort 흐름**:
+
+```
+TX_j 검증 실패(abort):
+  versions[j] = Pending
+  dep_list = readers[j].drain()
+  dep_list의 모든 TX → 재실행 큐에 추가
+  TX_j 재실행 시작
+
+TX_j 재실행 완료:
+  versions[j] = Data(new_value)
+  readers[j] 초기화 (새 독자 추적 재시작)
+```
+
+**BlockSTM 대비 장점**:
+- ESTIMATE early-abort 복잡도 제거
+- NEMO 측정 기준 재실행 횟수 약 절반 (고경합 워크로드)
+- 구현 단순성 ↑, 특허 쟁점 요소 ↓
+
+### 8-5. 라운드 간 계층 구조와 MVCC의 결합
+
+```
+Round N+1 (Speculative)
+  SlotVersions { TX_0..TX_m, readers }
+  ↑ Pending 폴백 시 상위 계층 탐색
+Round N (PendingCommit)       ← finalize 전까지 보존
+  SlotVersions { TX_0..TX_n, readers }
+  ↑ 없으면
+Canonical DB
+```
+
+- 라운드 간 계층: `BTreeMap<commit_index, RoundLayer>` (§9 Phase 2 설계)
+- 라운드 내 TX 간 버전: `SlotVersions` MVDS
+- 두 계층이 독립적으로 동작하며 읽기 시 순서대로 탐색
+
+---
+
+## 9. 체크리스트 대응
 
 | phase-0 항목 | 결과 |
 |--------------|------|
