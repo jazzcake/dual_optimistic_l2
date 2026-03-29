@@ -28,7 +28,7 @@ Dependency Notification MVCC 방식. 합의/스케줄러 없이 독립적으로 
 - [ ] `code_by_hash_ref` / `block_hash_ref` — canonical 위임
 
 ### Step 4: Dependency Notification API
-- [ ] `record_tx_execution` — REVM EvmState → SlotVersions 기록
+- [ ] `record_tx_execution` — REVM EvmState → SlotVersions 기록 (coinbase 슬롯 제외)
 - [ ] `abort_tx` — Pending 전환 + readers drain → 연쇄 재실행 목록 반환
 - [ ] `commit_tx_execution` — Data 확정 + readers 초기화
 - [ ] `validate_round` — VALIDAFTER 불변 조건 검증, 추가 재실행 목록 반환
@@ -137,6 +137,9 @@ pub struct ShadowDb<DB: DatabaseRef> {
     /// storage_ref 호출 시 READLAST에 사용할 현재 TxIndex.
     /// executor가 TX 실행 직전 set_current_tx()로 설정.
     current_tx: AtomicUsize,
+    /// 가스비 수취 주소. record_tx_execution 시 이 주소의 account 변경은 기록 제외.
+    /// coinbase 잔액 집계는 Phase 4 executor가 finalize_commit 시 별도 처리.
+    coinbase: Address,
 }
 ```
 
@@ -165,9 +168,24 @@ storage_ref(addr, slot):
 
 ### Step 4: Dependency Notification API
 
+#### Coinbase 슬롯 처리 정책
+
+모든 TX는 가스비 수취 주소(coinbase/beneficiary)의 잔액을 변경한다. 이를 일반 슬롯과
+동일하게 MVCC에 기록하면 coinbase가 모든 TX 간 직렬 의존성 병목이 된다.
+(pevm/grevm 분석에서 확인한 고충돌 지점)
+
+**Phase 2 방침**: `record_tx_execution` 및 `commit_tx_execution` 호출 시 coinbase 주소의
+`account_versions` 기록을 **생략**한다. coinbase 잔액 최종 집계는 Phase 4 (`parallel-evm`)
+executor가 각 TX의 가스비를 별도로 누산하여 `finalize_commit` 시 한 번에 canonical에 반영한다.
+
+이 정책은 `record_tx_execution` 시그니처에 `coinbase: Address` 파라미터를 추가하거나,
+`ShadowDb::new(canonical, coinbase: Address)` 생성 시 필드로 보존하는 방식으로 구현한다.
+Phase 2에서는 필드만 확보하고, 집계 로직은 Phase 4에서 구현한다.
+
 ```rust
 /// TX 실행 완료 후 REVM EvmState → SlotVersions 기록.
 /// is_changed() 슬롯 → Data, 읽기만 한 슬롯 → readers 갱신.
+/// coinbase 주소의 account 변경은 기록 제외 (Phase 4에서 별도 집계).
 pub fn record_tx_execution(
     &self, commit_index: u64, tx_idx: TxIndex, evm_state: &EvmState,
 )
@@ -575,6 +593,7 @@ where DB: DatabaseRef + DatabaseCommit,
 ## 완료 기준 (Done Criteria)
 
 1. `cargo test -p shadow-state` 17개 테스트 모두 통과한다.
+   - 추가: `ShadowDb::new`에 `coinbase: Address` 파라미터 포함, coinbase 슬롯 미기록 확인.
 2. **READLAST**: TX_k는 자신보다 앞선 TX 중 최신 Data 버전을 읽는다. Pending 시 이전 Data로 폴백.
 3. **Dependency Notification**: `abort_tx` 반환값에 해당 버전을 읽은 모든 TX가 포함된다 (체인 포함).
 4. **중간 상태 검증**: `abort_tx` 직후 `Pending` 전환과 readers drain이 즉시 반영된다.
