@@ -1,13 +1,14 @@
 # 전체 업무 목록 (Master Task List)
 
-## 현재 Phase: **Phase 2 완료 → Phase 3 대기**
+## 현재 Phase: **Phase 2 완료 → Phase 3-A 대기**
 
 | Phase | 제목 | 상태 | 문서 |
 |-------|------|------|------|
 | 0 | 환경 구성 & 코드베이스 분석 | ✅ 완료 | [phase-0.md](phase-0.md) |
 | 1 | 인터페이스 설계 | ✅ 완료 | [phase-1.md](phase-1.md) |
 | 2 | Shadow State 구현 | ✅ 완료 | [phase-2.md](phase-2.md) |
-| 3 | Mysticeti 합의 추출 | ⏳ 대기 | [phase-3.md](phase-3.md) |
+| 3-A | Mysticeti 코드 추출 + 독립 빌드 | ⏳ 대기 | [phase-3.md](phase-3.md) |
+| 3-B | SoftCommit + 시뮬레이터 + 테스트 | ⏳ 대기 | [phase-3.md](phase-3.md) |
 | 4 | 낙관적 파이프라인 스케줄러 구현 | ⏳ 대기 | [phase-4.md](phase-4.md) |
 | 5 | 통합 & 벤치마크 | ⏳ 대기 | [phase-5.md](phase-5.md) |
 

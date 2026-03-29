@@ -50,6 +50,45 @@
 - `unsafe` 코드는 `// SAFETY:` 주석 필수
 - 외부 저장소(`extern/`) 코드는 직접 수정하지 않음. 필요 시 해당 fork에서 수정 후 submodule 업데이트
 
+### 외부 코드 재사용 규칙 (Apache 2.0 출처 표기)
+
+`extern/` 의 Apache 2.0 코드를 `crates/` 로 이식할 때는 반드시 출처를 명시한다.
+
+```rust
+// Adapted from: sui/consensus/core/src/base_committer.rs (lines 123-200)
+// Original copyright: Copyright (c) Mysten Labs, Inc.
+// License: Apache 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+// Changes: removed score-based LeaderSchedule, replaced with round-robin
+```
+
+- 파일 단위로 이식하는 경우: 파일 최상단에 표기
+- 함수/구조체 단위인 경우: 해당 항목 바로 위에 표기
+- 수정 내용이 있으면 `Changes:` 항목에 구체적으로 기술
+- 재구현(재작성)이 아닌 한 반드시 이 규칙을 따른다
+
+### Design by Contract (사전조건 assert)
+
+모든 공개(pub) 함수의 진입부에 인자 및 객체 상태에 대한 사전조건을 명시한다.
+
+```rust
+pub fn add_block(&mut self, block_ref: BlockRef, committee: &Committee) -> bool {
+    debug_assert!((block_ref.author as usize) < committee.size(),
+        "author index {} out of committee size {}", block_ref.author, committee.size());
+    debug_assert!(block_ref.round > 0,
+        "round must be positive (use genesis API for round 0)");
+    // ...
+}
+```
+
+| 종류 | 사용 시점 |
+|------|---------|
+| `debug_assert!` | 함수 인자·객체 상태의 사전조건 — debug 빌드에서만 검사, release에서 제거 |
+| `assert!` | 절대 위반 불가 불변식 (invariant) — 항상 검사 |
+
+- TDD 테스트: "올바른 경로"가 기대 결과를 내는지 검증
+- DbC assert: "잘못된 입력으로 호출하는 버그"를 즉시 탐지
+- 두 가지는 상호 보완 관계이며 함께 사용한다
+
 ---
 
 ## Phase 진행 규칙

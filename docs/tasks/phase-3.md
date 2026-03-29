@@ -5,43 +5,135 @@
 
 ---
 
-## 작업 목록
+## Phase 3-A / 3-B 분할 근거
 
-### 코드 추출
-- [ ] Phase 0 분석 결과를 기반으로 추출 대상 파일 목록 확정
-- [ ] `crates/consensus`에 Mysticeti 핵심 코드 이식
-- [ ] SUI 전용 타입(`sui-types` 등) → 프로젝트 내부 타입으로 교체
-- [ ] SUI 전용 네트워크 레이어 제거 또는 추상화
+Phase 3는 성격이 다른 두 작업으로 구성된다:
 
-### 신호 발생 구현
-- [ ] 2Δ SoftCommit 이벤트 발생 로직 연결
-- [ ] 3Δ HardCommit 이벤트 발생 로직 연결
-- [ ] `ConsensusEvent` 채널 전송 구현
+| 단계 | 성격 | 목표 |
+|------|------|------|
+| **3-A** | 정적 작업 — 복사·수정·빌드 | `cargo build -p consensus` 통과 |
+| **3-B** | 동적 작업 — 신규 설계·시뮬레이터·TDD | `cargo test -p consensus` 5/5 통과 |
 
-### 의존성 정리
-- [ ] `crates/consensus/Cargo.toml` — 외부 의존성 최소화
-- [ ] `extern/sui` path 의존성 사용 여부 결정 (이식 vs 참조)
+---
 
-### 테스트 하네스 구현 (결정론적 시뮬레이터)
-- [ ] Phase 1에서 설계한 `SimulatedNetwork` / `SimulatedNode` 구현
-- [ ] in-process N노드 환경에서 메시지 라우팅 구현
-- [ ] 네트워크 파티션 / 비잔틴 노드 주입 기능 구현
-- [ ] 가짜 시간(fake time) 또는 msim 기반 결정론적 실행 구성
+## Phase 3-A: SUI 코드 추출 + 독립 빌드
+
+### 이식 전략: 복사 + Apache 2.0 출처 표기
+
+SUI는 Apache 2.0 라이선스이므로 코드를 복사하고 출처를 명시하는 방식을 사용한다.
+각 파일/함수 상단에 아래 형식으로 표기한다:
+
+```rust
+// Adapted from: sui/consensus/core/src/base_committer.rs (lines N-M)
+// Original copyright: Copyright (c) Mysten Labs, Inc.
+// License: Apache 2.0 — https://www.apache.org/licenses/LICENSE-2.0
+// Changes: <수정 내용>
+```
+
+### 복사 대상 파일 (9개)
+
+| SUI 원본 | 우리 파일 | 주요 수정 사항 |
+|---------|----------|--------------|
+| `types/src/block.rs` | `types.rs` | SUI 전용 필드 제거 |
+| `config/src/committee.rs` | `committee.rs` | `fastcrypto` → `sha3` |
+| `core/src/stake_aggregator.rs` | `stake_aggregator.rs` | 거의 그대로 |
+| `core/src/threshold_clock.rs` | `threshold_clock.rs` | `prometheus` 메트릭 제거 |
+| `core/src/dag_state.rs` | `dag_state.rs` | `Store` trait → in-memory |
+| `core/src/block_manager.rs` | `block_manager.rs` | 거의 그대로 |
+| `core/src/base_committer.rs` | `base_committer.rs` | `LeaderSchedule` → round-robin |
+| `core/src/universal_committer.rs` | `universal_committer.rs` | 거의 그대로 |
+| `core/src/linearizer.rs` | `linearizer.rs` | SUI fast-path 필드 제거 |
+
+### 제거할 SUI 전용 의존성
+
+| 의존성 | 제거 방법 |
+|--------|---------|
+| `fastcrypto` | SHA3 → `sha3` crate 직접 사용 |
+| `sui-macros` (`fail_point!`, `sim_test`) | no-op 매크로로 대체 또는 제거 |
+| `sui-tls`, `sui-http` | 제거 |
+| `CommitFinalizer`, `TransactionCertifier` | 제거 (SUI fast-path, 우리 불필요) |
+| `prometheus` 메트릭 | 제거 (Phase 5에서 필요 시 재추가) |
+| `LeaderSchedule` (점수 기반) | `round % committee.size()` 라운드로빈으로 교체 |
+
+### 추가할 의존성 (Cargo.toml)
+
+```toml
+[dependencies]
+shared       = { workspace = true }
+tokio        = { workspace = true }
+parking_lot  = "0.12"
+sha3         = "0.10"
+rand         = "0.8"
+```
+
+### Phase 3-A 작업 목록
+
+- [ ] `types.rs` 이식 + 출처 표기 + DbC assert 추가
+- [ ] `committee.rs` 이식 + `fastcrypto` → `sha3` 교체
+- [ ] `stake_aggregator.rs` 이식 + DbC assert 추가
+- [ ] `threshold_clock.rs` 이식 + 메트릭 제거
+- [ ] `dag_state.rs` 이식 + Store → in-memory
+- [ ] `block_manager.rs` 이식
+- [ ] `base_committer.rs` 이식 + LeaderSchedule → round-robin
+- [ ] `universal_committer.rs` 이식
+- [ ] `linearizer.rs` 이식 + fast-path 필드 제거
+- [ ] `Cargo.toml` 의존성 정리
+- [ ] `cargo build -p consensus` 통과 확인
+
+### Phase 3-A 완료 기준
+
+1. `cargo build -p consensus` 가 `extern/sui` 없이 통과한다.
+2. 모든 이식 파일에 Apache 2.0 출처 표기가 있다.
+3. 모든 `pub` 함수에 `debug_assert!` 사전조건이 있다.
+
+---
+
+## Phase 3-B: SoftCommit + 시뮬레이터 + 테스트
+
+### 신규 파일 (4개)
+
+| 파일 | 내용 |
+|------|------|
+| `soft_commit.rs` | SoftCommitTracker — SUI에 없는 신규 코드. voting round(R+1)에서 2f+1 감지 |
+| `node.rs` | ConsensusNode — 전체 조합 + `ConsensusEvent` 채널 발송 |
+| `sim/network.rs` | SimulatedNetwork — 채널 기반 메시지 라우팅 + LatencyModel + PartitionModel |
+| `sim/node.rs` | SimulatedNode + FakeClock (`tokio::time::pause`) + Seeded RNG (ChaCha8) |
+
+### SoftCommit 설계 (SUI에 없는 신규 로직)
+
+SUI의 `try_direct_decide()`는 R+2(decision round)에서만 실행된다.
+우리의 2Δ SoftCommit은 R+1(voting round)에서 감지해야 한다.
+
+```
+accept_block(block at voting_round R+1):
+    for ancestor in block.ancestors where ancestor.round == R:
+        soft_commit_tracker.add_vote(ancestor_ref, block.author, committee)
+        if soft_commit_tracker.reached_quorum(ancestor_ref):
+            event_sender.send(ConsensusEvent::SoftCommit { round: R, leader: ancestor_ref })
+```
+
+### Phase 3-B 작업 목록
+
+- [ ] `soft_commit.rs` 구현 (SoftCommitTracker)
+- [ ] `node.rs` 구현 (ConsensusNode)
+- [ ] `sim/network.rs` 구현 (SimulatedNetwork + PartitionModel)
+- [ ] `sim/node.rs` 구현 (SimulatedNode + FakeClock + Seeded RNG)
+- [ ] `test_soft_commit_triggered` 구현 및 통과
+- [ ] `test_hard_commit_triggered` 구현 및 통과
+- [ ] `test_dag_causal_order` 구현 및 통과
+- [ ] `test_byzantine_node_tolerance` 구현 및 통과
+- [ ] `test_deterministic_replay` 구현 및 통과
+
+### Phase 3-B 완료 기준
+
+1. `cargo test -p consensus` → 5/5 통과
+2. 결정론적 시뮬레이터가 동일 시드로 항상 동일한 이벤트 순서를 재현한다.
 
 ---
 
 ## 실행 계획 (Execution Plan)
 
-> 이 섹션은 Phase 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
-
----
-
-## 완료 기준 (Done Criteria)
-
-1. `cargo build -p consensus` 가 `extern/sui` 없이 통과한다. (이식 방식 선택 시)
-2. 또는 `extern/sui` path 의존성만으로 빌드된다. (참조 방식 선택 시)
-3. SoftCommit / HardCommit 이벤트가 **결정론적 다중 노드 시뮬레이터** 환경에서 정상 발생한다.
-4. 결정론적 시뮬레이터가 동작하며, 동일 시드로 항상 동일한 결과를 재현한다.
+> 3-A 계획은 Phase 3-A 시작 전, 3-B 계획은 Phase 3-B 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
 
 ---
 
