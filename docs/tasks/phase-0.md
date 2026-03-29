@@ -43,7 +43,65 @@
 
 ## 실행 계획 (Execution Plan)
 
-> 이 섹션은 Phase 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+**작업 순서 원칙**: REVM → SUI Mysticeti → SUI 테스트 인프라 → Phase 1 입력 정리
+
+REVM을 먼저 하는 이유: 독립 크레이트라 구조가 단순하고, `Database` trait 파악이
+Shadow State(Phase 2) 설계의 직접 입력이 되므로 기준점을 먼저 확보한다.
+
+---
+
+### Step 1: REVM 분석
+
+| 순서 | 작업 | 도구 |
+|------|------|------|
+| 1-1 | `extern/revm/` crate 디렉토리 구조 전체 파악 | Glob |
+| 1-2 | `Database` trait 위치 및 메서드 시그니처 전체 파악 | Grep → Read |
+| 1-3 | `Evm` builder 패턴 및 트랜잭션 실행 흐름 추적 | Read |
+| 1-4 | 병렬 실행 시 상태 격리 가능 여부 파악 (thread-safe 여부 등) | Read |
+| 1-5 | `docs/revm-analysis.md` 작성 | Write |
+
+---
+
+### Step 2: SUI Mysticeti 분석
+
+| 순서 | 작업 | 도구 |
+|------|------|------|
+| 2-1 | `extern/sui/` 에서 consensus 관련 crate 디렉토리 탐색 | Glob |
+| 2-2 | 핵심 타입 목록 작성 (Block, DAGVertex, Round, QuorumCertificate 등) | Grep → Read |
+| 2-3 | 2Δ SoftCommit 발생 코드 위치 추적 | Grep → Read |
+| 2-4 | 3Δ HardCommit 발생 코드 위치 추적 | Grep → Read |
+| 2-5 | SUI 전용 의존성 (`sui-types`, `sui-storage` 등) 목록화 | Read Cargo.toml들 |
+| 2-6 | 의존성을 "제거 가능 / 대체 필요 / 그대로 사용" 3분류 | 분석 |
+| 2-7 | `docs/mysticeti-analysis.md` 작성 | Write |
+
+---
+
+### Step 3: SUI 테스트 인프라 분석
+
+| 순서 | 작업 | 도구 |
+|------|------|------|
+| 3-1 | `sui-simulator`, `msim` 등 테스트 유틸리티 존재 여부 및 구조 파악 | Glob → Read |
+| 3-2 | `msim` 재사용 가능 여부 판단 (라이선스, 외부 의존성, API 안정성) | Read |
+| 3-3 | 재사용 불가 시 대안 후보 조사 (자체 구현, 타 오픈소스 등) | 분석 |
+| 3-4 | 테스트 전략 확정: 결정론적 시뮬레이터(정확성) / 멀티스레드(벤치마크) / Docker(검증) 구성 방침 | 결정 |
+| 3-5 | `docs/test-strategy.md` 작성 | Write |
+
+---
+
+### Step 4: Phase 1 입력 정리
+
+| 순서 | 작업 |
+|------|------|
+| 4-1 | 세 분석 결과를 바탕으로 Phase 1에서 결정할 경계면(boundary) 목록 정리 |
+| 4-2 | phase-0.md 완료 기준 전체 체크 후 사용자께 완료 보고 및 승인 요청 |
+
+---
+
+### 산출물
+- `docs/revm-analysis.md`
+- `docs/mysticeti-analysis.md`
+- `docs/test-strategy.md`
+- `phase-0.md` 체크리스트 완성
 
 ---
 
