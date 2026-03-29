@@ -1,6 +1,6 @@
 # Phase 3: Mysticeti 합의 추출
 
-**상태**: 🔄 3-A 완료 → 3-B 대기
+**상태**: ✅ 3-A 완료 / 3-B 완료
 **목표**: SUI 저장소에서 Mysticeti DAG 합의에 필요한 최소한의 코드를 추출하여 `crates/consensus`에 이식한다. SUI 전용 의존성 없이 독립 컴파일되어야 한다.
 
 ---
@@ -116,15 +116,15 @@ accept_block(block at voting_round R+1):
 
 ### Phase 3-B 작업 목록
 
-- [ ] `soft_commit.rs` 구현 (SoftCommitTracker)
-- [ ] `node.rs` 구현 (ConsensusNode)
-- [ ] `sim/network.rs` 구현 (SimulatedNetwork + PartitionModel)
-- [ ] `sim/node.rs` 구현 (SimulatedNode + FakeClock + Seeded RNG)
-- [ ] `test_soft_commit_triggered` 구현 및 통과
-- [ ] `test_hard_commit_triggered` 구현 및 통과
-- [ ] `test_dag_causal_order` 구현 및 통과
-- [ ] `test_byzantine_node_tolerance` 구현 및 통과
-- [ ] `test_deterministic_replay` 구현 및 통과
+- [x] `soft_commit.rs` 구현 (SoftCommitTracker)
+- [x] `node.rs` 구현 (ConsensusNode)
+- [x] `sim/network.rs` 구현 (SimulatedNetwork + PartitionModel)
+- [x] `sim/node.rs` 구현 (SimulatedNode + FakeClock + Seeded RNG)
+- [x] `test_soft_commit_triggered` 구현 및 통과
+- [x] `test_hard_commit_triggered` 구현 및 통과
+- [x] `test_dag_causal_order` 구현 및 통과
+- [x] `test_byzantine_node_tolerance` 구현 및 통과
+- [x] `test_deterministic_replay` 구현 및 통과
 
 ### Phase 3-B 완료 기준
 
@@ -151,7 +151,12 @@ accept_block(block at voting_round R+1):
 | 10 | `universal_committer.rs` | ✅ protocol_config 제거, 단순 빌더 |
 | 11 | `linearizer.rs` | ✅ TrustedCommit/bcs 제거, 단순 CommittedSubDag |
 
-> 3-B 계획은 Phase 3-B 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+| 1 | `soft_commit.rs` | ✅ SoftCommitTracker — R+1 voting round 2f+1 쿼럼 감지 |
+| 2 | `node.rs` | ✅ ConsensusNode — 전체 파이프라인 조합 + 이벤트 발송 |
+| 3 | `sim/mod.rs` | ✅ sim 서브모듈 진입점 |
+| 4 | `sim/network.rs` | ✅ SimulatedNetwork + PartitionModel |
+| 5 | `sim/node.rs` | ✅ SimulatedNode + FakeClock + StdRng(seeded) |
+| 6 | tests (node.rs) | ✅ 5개 테스트 7/7 통과 |
 
 ---
 
@@ -163,8 +168,8 @@ cargo test -p consensus
 
 모든 테스트는 **결정론적 in-process 시뮬레이터** 위에서 실행한다.
 
-- [ ] `test_soft_commit_triggered` — N노드 시뮬레이터에서 2f+1 쿼럼 형성 시 SoftCommit 이벤트 발생
-- [ ] `test_hard_commit_triggered` — 라운드 앵커 확정 시 HardCommit 이벤트 발생
-- [ ] `test_dag_causal_order` — DAG에서 인과 순서가 보존됨
-- [ ] `test_byzantine_node_tolerance` — f개 비잔틴 노드 주입 시에도 쿼럼 정상 형성
-- [ ] `test_deterministic_replay` — 동일 시드로 2회 실행 시 동일한 이벤트 순서 재현
+- [x] `test_soft_commit_triggered` — N노드 시뮬레이터에서 2f+1 쿼럼 형성 시 SoftCommit 이벤트 발생
+- [x] `test_hard_commit_triggered` — 라운드 앵커 확정 시 HardCommit 이벤트 발생
+- [x] `test_dag_causal_order` — DAG에서 인과 순서가 보존됨
+- [x] `test_byzantine_node_tolerance` — f개 비잔틴 노드 주입 시에도 쿼럼 정상 형성
+- [x] `test_deterministic_replay` — 동일 시드로 2회 실행 시 동일한 이벤트 순서 재현

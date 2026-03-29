@@ -24,6 +24,17 @@ pub(crate) mod universal_committer;
 pub mod linearizer;
 
 // ---------------------------------------------------------------------------
+// Phase 3-B: new modules
+// ---------------------------------------------------------------------------
+
+pub(crate) mod soft_commit;
+pub mod node;
+
+/// Deterministic simulation infrastructure (test-only).
+#[cfg(test)]
+pub mod sim;
+
+// ---------------------------------------------------------------------------
 // Public re-exports (crate boundary API)
 // ---------------------------------------------------------------------------
 
@@ -36,23 +47,13 @@ pub use types::{
 pub use commit::{CommitDigest, CommitIndex, CommitRef, CommittedSubDag};
 pub use dag_state::DagState;
 pub use linearizer::Linearizer;
+pub use node::ConsensusNode;
 
 // ---------------------------------------------------------------------------
-// Phase 3-B stubs (ConsensusHandle interface, network simulation)
+// Pluggable latency model (used by simulation and production network clients)
 // ---------------------------------------------------------------------------
 
-use std::{future::Future, pin::Pin, time::Duration};
-use tokio::sync::broadcast;
-use shared::{ConsensusError, ConsensusEvent, EthSignedTx};
-
-/// Handle to the running consensus engine.
-/// Phase 3-B will provide a `ConsensusNode` implementation.
-pub trait ConsensusHandle: Send + Sync {
-    fn event_receiver(&self) -> broadcast::Receiver<ConsensusEvent>;
-    fn submit_transactions(&self, txs: Vec<EthSignedTx>) -> Result<(), ConsensusError>;
-    fn start(&self) -> Pin<Box<dyn Future<Output = Result<(), ConsensusError>> + Send + '_>>;
-    fn stop(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
-}
+use std::time::Duration;
 
 /// Pluggable network-delay model for simulation.
 pub trait LatencyModel: Send + Sync {
@@ -72,13 +73,29 @@ pub struct UniformLatency {
 }
 impl LatencyModel for UniformLatency {
     fn delay(&self) -> Duration {
-        // Phase 3-B: implement random delay within [min, max]
-        todo!("UniformLatency::delay is implemented in Phase 3-B")
+        // Returns the midpoint of [min, max].
+        // A proper random implementation requires an injected RNG (Phase 5).
+        self.min + self.max.saturating_sub(self.min) / 2
     }
 }
 
+// ---------------------------------------------------------------------------
+// ConsensusHandle trait (Phase 3-B stub — full impl in Phase 4)
+// ---------------------------------------------------------------------------
+
+use std::{future::Future, pin::Pin};
+use tokio::sync::broadcast;
+use shared::{ConsensusError, ConsensusEvent, EthSignedTx};
+
+/// Handle to the running consensus engine.
+pub trait ConsensusHandle: Send + Sync {
+    fn event_receiver(&self) -> broadcast::Receiver<ConsensusEvent>;
+    fn submit_transactions(&self, txs: Vec<EthSignedTx>) -> Result<(), ConsensusError>;
+    fn start(&self) -> Pin<Box<dyn Future<Output = Result<(), ConsensusError>> + Send + '_>>;
+    fn stop(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
+}
+
 /// In-process mock network client for simulation.
-/// Phase 3-B implements the full SimulatedNetwork on top of this.
 pub struct InMemoryNetworkClient {
     _peers: std::marker::PhantomData<shared::AuthorityIndex>,
     _latency: Box<dyn LatencyModel>,
