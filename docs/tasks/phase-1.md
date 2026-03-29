@@ -32,6 +32,12 @@
 
 ---
 
+## 실행 계획 (Execution Plan)
+
+> 이 섹션은 Phase 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+
+---
+
 ## 완료 기준 (Done Criteria)
 
 1. 5개 컴포넌트 간의 모든 인터페이스가 Rust trait/struct 수준으로 명세되어 있다.

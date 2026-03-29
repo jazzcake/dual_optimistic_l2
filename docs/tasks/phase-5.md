@@ -33,6 +33,12 @@
 
 ---
 
+## 실행 계획 (Execution Plan)
+
+> 이 섹션은 Phase 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+
+---
+
 ## 완료 기준 (Done Criteria)
 
 1. `cargo test` (전체) 통과

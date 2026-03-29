@@ -34,6 +34,12 @@
 
 ---
 
+## 실행 계획 (Execution Plan)
+
+> 이 섹션은 Phase 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+
+---
+
 ## 완료 기준 (Done Criteria)
 
 1. SUI에서 Mysticeti 관련 crate를 정확히 식별하고, 분리에 필요한 최소 의존성 목록이 문서화되어 있다.

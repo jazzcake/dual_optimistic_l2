@@ -24,6 +24,12 @@
 
 ---
 
+## 실행 계획 (Execution Plan)
+
+> 이 섹션은 Phase 시작 전 사용자와 함께 수립하고 승인받은 후 채운다.
+
+---
+
 ## 완료 기준 (Done Criteria)
 
 1. `cargo build -p consensus` 가 `extern/sui` 없이 통과한다. (이식 방식 선택 시)
