@@ -1,0 +1,4 @@
+[package]
+name = "shadow-state"
+version.workspace = true
+edition.workspace = true

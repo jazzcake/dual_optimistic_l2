@@ -1,0 +1,4 @@
+[package]
+name = "parallel-evm"
+version.workspace = true
+edition.workspace = true

@@ -1,0 +1,13 @@
+[workspace]
+members = [
+    "crates/consensus",
+    "crates/scheduler",
+    "crates/shadow-state",
+    "crates/parallel-evm",
+    "crates/node",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+version = "0.1.0"

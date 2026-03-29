@@ -1,0 +1,6 @@
+[submodule "extern/sui"]
+	path = extern/sui
+	url = https://github.com/jazzcake/sui
+[submodule "extern/revm"]
+	path = extern/revm
+	url = https://github.com/jazzcake/revm
