@@ -1,6 +1,6 @@
 # Phase 2: Shadow State 구현
 
-**상태**: ⏳ 대기
+**상태**: 🔄 진행중
 **목표**: REVM의 `Database` trait을 구현하는 Multi-Version Shadow Memory를 완성한다. 합의/스케줄러 없이 독립적으로 테스트 가능해야 한다.
 
 ---

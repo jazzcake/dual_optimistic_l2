@@ -2,3 +2,7 @@
 name = "scheduler"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+shared = { workspace = true }
+tokio = { workspace = true }

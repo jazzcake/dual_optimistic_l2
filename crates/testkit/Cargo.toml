@@ -1,8 +1,9 @@
 [package]
-name = "consensus"
+name = "testkit"
 version.workspace = true
 edition.workspace = true
 
 [dependencies]
 shared = { workspace = true }
+consensus = { workspace = true }
 tokio = { workspace = true }

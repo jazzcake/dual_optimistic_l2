@@ -2,3 +2,11 @@
 name = "node"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+shared = { workspace = true }
+consensus = { workspace = true }
+scheduler = { workspace = true }
+shadow-state = { workspace = true }
+parallel-evm = { workspace = true }
+tokio = { workspace = true }

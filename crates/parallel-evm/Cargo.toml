@@ -2,3 +2,8 @@
 name = "parallel-evm"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+shared = { workspace = true }
+shadow-state = { workspace = true }
+tokio = { workspace = true }

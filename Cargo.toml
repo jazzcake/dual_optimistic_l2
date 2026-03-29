@@ -1,13 +1,24 @@
 [workspace]
 members = [
+    "crates/shared",
     "crates/consensus",
     "crates/scheduler",
     "crates/shadow-state",
     "crates/parallel-evm",
     "crates/node",
+    "crates/testkit",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2021"
 version = "0.1.0"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["sync", "time"] }
+shared = { path = "crates/shared" }
+consensus = { path = "crates/consensus" }
+scheduler = { path = "crates/scheduler" }
+shadow-state = { path = "crates/shadow-state" }
+parallel-evm = { path = "crates/parallel-evm" }
+testkit = { path = "crates/testkit" }
