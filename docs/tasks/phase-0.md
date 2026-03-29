@@ -16,11 +16,11 @@
 - [x] 문서 구조 확립 (CLAUDE.md, TASKS.md, phase 파일들)
 
 ### SUI Mysticeti 분석
-- [ ] `extern/sui` 에서 합의 관련 crate 위치 파악
-- [ ] Mysticeti의 핵심 타입 목록 작성 (Block, DAG, Round, Quorum 등)
-- [ ] SUI 내부 의존성 그래프 분석 (어디까지가 Mysticeti 전용인가)
-- [ ] 2Δ SoftCommit / 3Δ HardCommit 신호를 발생시키는 코드 위치 파악
-- [ ] 분리 시 제거해야 할 SUI 전용 의존성 목록 작성
+- [x] `extern/sui` 에서 합의 관련 crate 위치 파악
+- [x] Mysticeti의 핵심 타입 목록 작성 (Block, DAG, Round, Quorum 등)
+- [x] SUI 내부 의존성 그래프 분석 (어디까지가 Mysticeti 전용인가)
+- [x] 2Δ SoftCommit / 3Δ HardCommit 신호를 발생시키는 코드 위치 파악
+- [x] 분리 시 제거해야 할 SUI 전용 의존성 목록 작성
 
 ### REVM 분석
 - [x] `extern/revm` crate 구조 파악 (revm, revm-interpreter, revm-primitives 등)
@@ -35,7 +35,7 @@
 - [ ] 테스트 전략 결정: 결정론적 시뮬레이션(정확성) vs 멀티스레드(벤치마크) 분리 방침 확정
 
 ### 분석 문서 작성
-- [ ] `docs/mysticeti-analysis.md` — Mysticeti crate 맵 + 의존성 그래프
+- [x] `docs/mysticeti-analysis.md` — Mysticeti crate 맵 + 의존성 그래프
 - [x] `docs/revm-analysis.md` — REVM Database trait + 실행 흐름
 - [ ] `docs/test-strategy.md` — 시뮬레이션 전략 및 선택 근거
 
