@@ -23,10 +23,10 @@
 - [ ] 분리 시 제거해야 할 SUI 전용 의존성 목록 작성
 
 ### REVM 분석
-- [ ] `extern/revm` crate 구조 파악 (revm, revm-interpreter, revm-primitives 등)
-- [ ] `Database` trait 인터페이스 파악 (Shadow State 구현 진입점)
-- [ ] `Evm` builder 패턴 및 트랜잭션 실행 흐름 파악
-- [ ] 병렬 실행을 위한 상태 격리 방법 파악
+- [x] `extern/revm` crate 구조 파악 (revm, revm-interpreter, revm-primitives 등)
+- [x] `Database` trait 인터페이스 파악 (Shadow State 구현 진입점)
+- [x] `Evm` builder 패턴 및 트랜잭션 실행 흐름 파악
+- [x] 병렬 실행을 위한 상태 격리 방법 파악
 
 ### SUI 테스트 인프라 분석
 - [ ] SUI의 합의 테스트 유틸리티 파악 (`sui-simulator`, `msim` 등)
@@ -36,7 +36,7 @@
 
 ### 분석 문서 작성
 - [ ] `docs/mysticeti-analysis.md` — Mysticeti crate 맵 + 의존성 그래프
-- [ ] `docs/revm-analysis.md` — REVM Database trait + 실행 흐름
+- [x] `docs/revm-analysis.md` — REVM Database trait + 실행 흐름
 - [ ] `docs/test-strategy.md` — 시뮬레이션 전략 및 선택 근거
 
 ---
