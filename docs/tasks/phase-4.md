@@ -1,6 +1,6 @@
 # Phase 4: 낙관적 파이프라인 스케줄러 구현
 
-**상태**: ⏳ 대기
+**상태**: ✅ 완료
 **목표**: 합의 레이어(`ConsensusEvent`)와 병렬 실행 레이어(`TxBatch`) 사이의
 비동기 중재자 이벤트 루프를 구현한다.
 라운드 순서 보장, 2Δ↔3Δ 조정, Backpressure 제어가 핵심이다.
@@ -148,11 +148,11 @@ tracing  = "0.1"
 
 | 순번 | 파일 | 상태 |
 |------|------|------|
-| 1 | `pending_queue.rs` | ⏳ |
-| 2 | `backpressure.rs` | ⏳ |
-| 3 | `pipeline.rs` | ⏳ |
-| 4 | `lib.rs` 업데이트 | ⏳ |
-| 5 | 테스트 6개 | ⏳ |
+| 1 | `pending_queue.rs` | ✅ |
+| 2 | `backpressure.rs` | ✅ |
+| 3 | `pipeline.rs` | ✅ |
+| 4 | `lib.rs` 업데이트 | ✅ |
+| 5 | 테스트 6개 | ✅ |
 
 ---
 
@@ -178,3 +178,45 @@ cargo test -p scheduler
 | `test_backpressure_release` | depth < threshold/2 로 감소 | `Resume` 신호 발송 확인 |
 | `test_hard_commit_match` | SoftCommit(R3) dispatch → HardCommit(R3, idx=1) | `CommitDecision::Commit { commit_index: 1 }` |
 | `test_hard_commit_mismatch` | HardCommit(R3) 도착 (SoftCommit 없음) | `CommitDecision::FreshBatch { is_optimistic: false }` |
+
+---
+
+## Phase 4에서 발견된 미해결 과제 (Phase 5 이월)
+
+Phase 4 완료 후 코드 검토 중 발견된 구조적 미완성 사항. Phase 5 통합 작업의 선결 조건이다.
+
+### 1. tx 페이로드가 전 구간에서 비어 있음
+
+`crates/consensus/src/node.rs`의 두 곳이 모두 하드코딩된 `vec![]`이다:
+
+```rust
+// check_soft_commit() — SoftCommit 생성 시
+ConsensusEvent::SoftCommit { txs: vec![], .. }
+
+// to_shared_subdag() — HardCommit 생성 시
+OurVerifiedBlock { txs: vec![], .. }
+```
+
+**근본 원인**: `crates/consensus/src/types.rs`의 `VerifiedBlock`에 EVM tx 페이로드 필드가 없다.
+consensus 크레이트는 순수 DAG 구조(round, author, digest, ancestors)만 다루도록 설계되었으며,
+EVM 트랜잭션은 연결되어 있지 않다.
+
+### 2. SoftCommit에 채울 tx 범위의 설계 결정 (A vs B 미결)
+
+| 선택지 | 내용 |
+|--------|------|
+| **A. 리더 블록 tx만** | 2Δ에 즉시 알 수 있는 최소 집합. HardCommit subDAG에 나머지 tx가 추가로 있어 불완전한 투기 실행 |
+| **B. 전체 subDAG tx** | 리더 확정 시 인과 히스토리 전체가 결정적이므로 이론적으로 가능. HardCommit과 tx 집합 일치 → 진정한 투기 실행 |
+
+Mysticeti 설계 의도는 **B**이며, `ConsensusNode`가 `dag_state: Arc<RwLock<DagState>>`를
+`#[allow(dead_code)]`로 보유하고 있는 것이 B 구현을 위한 준비 흔적이다.
+
+### 3. Phase 5에서 해결해야 할 구체적 작업
+
+| 작업 | 관련 파일 |
+|------|----------|
+| A vs B 설계 결정 확정 | 설계 문서 |
+| `VerifiedBlock` / `TestBlock`에 `txs: Vec<EthSignedTx>` 페이로드 추가 | `crates/consensus/src/types.rs` |
+| `check_soft_commit()`에서 `dag_state`를 통해 subDAG tx 수집 | `crates/consensus/src/node.rs` |
+| `to_shared_subdag()`에서 각 블록 tx 채우기 | `crates/consensus/src/node.rs` |
+| scheduler 통합 테스트에서 실제 tx 흐름 검증 | `crates/testkit` or `crates/node` |

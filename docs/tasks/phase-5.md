@@ -5,6 +5,60 @@
 
 ---
 
+## Phase 4 이월 과제 (선결 조건)
+
+> 아래 항목들은 Phase 4 완료 후 발견된 미완성 사항이다.
+> **통합 테스트 및 벤치마크 작업을 시작하기 전에 반드시 해결해야 한다.**
+
+### 과제 1 — SoftCommit tx 범위 설계 결정 (A vs B)
+
+현재 `ConsensusEvent::SoftCommit.txs`와 `OurVerifiedBlock.txs`가 모두 `vec![]` stub이다.
+실제 tx를 채우기 전에 아래 두 설계 중 하나를 확정해야 한다.
+
+| 선택지 | 설명 | 비고 |
+|--------|------|------|
+| **A. 리더 블록 tx만** | SoftCommit 시점에 즉시 알 수 있는 최소 집합. HardCommit 시 나머지 tx 추가 실행 필요 | 구현 단순, 투기 효과 부분적 |
+| **B. 전체 subDAG tx** | 리더 확정 시 인과 히스토리 전체가 결정적 → Linearizer를 2Δ에 미리 실행. HardCommit과 tx 집합 일치 | Mysticeti 설계 의도, 투기 효과 완전 |
+
+`ConsensusNode.dag_state`가 `#[allow(dead_code)]`로 보유되어 있는 것은 B 구현을 위한 준비 흔적이다.
+
+### 과제 2 — consensus `VerifiedBlock`에 tx 페이로드 추가
+
+`crates/consensus/src/types.rs`의 `VerifiedBlock` 및 `TestBlock`에 tx 페이로드가 없다.
+
+```
+// 현재
+VerifiedBlock { round, author, digest, ancestors, timestamp_ms }
+
+// 필요
+VerifiedBlock { round, author, digest, ancestors, timestamp_ms, txs: Vec<EthSignedTx> }
+```
+
+이를 추가해야 `node.rs`의 두 stub(`check_soft_commit`, `to_shared_subdag`)을 실제 구현으로 교체할 수 있다.
+
+### 과제 3 — `check_soft_commit()` 구현 (선택 A 또는 B에 따라)
+
+```rust
+// 현재 (node.rs:153)
+ConsensusEvent::SoftCommit { txs: vec![], .. }
+
+// B 선택 시: dag_state를 순회해 리더 인과 히스토리 전체 tx 수집
+let txs = collect_subdag_txs(&self.dag_state, leader_ref, last_committed_round);
+ConsensusEvent::SoftCommit { txs, .. }
+```
+
+### 과제 4 — `to_shared_subdag()` tx 채우기
+
+```rust
+// 현재 (node.rs:207)
+OurVerifiedBlock { txs: vec![], .. }
+
+// 수정 후
+OurVerifiedBlock { txs: b.txs().to_vec(), .. }
+```
+
+---
+
 ## 작업 목록
 
 ### 통합 (`crates/node`)

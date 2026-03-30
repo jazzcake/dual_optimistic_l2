@@ -4,5 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-shared = { workspace = true }
-tokio = { workspace = true }
+shared   = { workspace = true }
+tokio    = { workspace = true, features = ["macros", "rt"] }
+tracing  = "0.1"
