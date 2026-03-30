@@ -10,17 +10,19 @@
 > 아래 항목들은 Phase 4 완료 후 발견된 미완성 사항이다.
 > **통합 테스트 및 벤치마크 작업을 시작하기 전에 반드시 해결해야 한다.**
 
-### 과제 1 — SoftCommit tx 범위 설계 결정 (A vs B)
+### 과제 1 — SoftCommit tx 범위: 리더의 전체 causal subDAG
 
 현재 `ConsensusEvent::SoftCommit.txs`와 `OurVerifiedBlock.txs`가 모두 `vec![]` stub이다.
-실제 tx를 채우기 전에 아래 두 설계 중 하나를 확정해야 한다.
 
-| 선택지 | 설명 | 비고 |
-|--------|------|------|
-| **A. 리더 블록 tx만** | SoftCommit 시점에 즉시 알 수 있는 최소 집합. HardCommit 시 나머지 tx 추가 실행 필요 | 구현 단순, 투기 효과 부분적 |
-| **B. 전체 subDAG tx** | 리더 확정 시 인과 히스토리 전체가 결정적 → Linearizer를 2Δ에 미리 실행. HardCommit과 tx 집합 일치 | Mysticeti 설계 의도, 투기 효과 완전 |
+**범위는 리더의 전체 causal subDAG tx** — 리더 블록 단독이 아니다.
 
-`ConsensusNode.dag_state`가 `#[allow(dead_code)]`로 보유되어 있는 것은 B 구현을 위한 준비 흔적이다.
+근거: 투표 블록(round R+1)이 리더(round R)를 참조했다는 사실 자체가
+"리더의 인과 조상 전체가 이미 로컬 DAG에 수신 완료"임을 의미한다.
+DAG 프로토콜은 조상이 없는 블록의 accept를 허용하지 않기 때문이다.
+따라서 2Δ 시점에 Linearizer가 3Δ에 commit할 subDAG를 동일하게 미리 계산할 수 있고,
+이것이 HardCommit 결과와 tx 집합이 일치하는 유일한 방법이다.
+
+`ConsensusNode.dag_state`가 `#[allow(dead_code)]`로 보유되어 있는 것은 이 구현을 위한 준비 흔적이다.
 
 ### 과제 2 — consensus `VerifiedBlock`에 tx 페이로드 추가
 

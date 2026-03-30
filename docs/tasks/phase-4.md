@@ -201,22 +201,22 @@ OurVerifiedBlock { txs: vec![], .. }
 consensus 크레이트는 순수 DAG 구조(round, author, digest, ancestors)만 다루도록 설계되었으며,
 EVM 트랜잭션은 연결되어 있지 않다.
 
-### 2. SoftCommit에 채울 tx 범위의 설계 결정 (A vs B 미결)
+### 2. SoftCommit에 채울 tx 범위: 리더의 전체 causal subDAG
 
-| 선택지 | 내용 |
-|--------|------|
-| **A. 리더 블록 tx만** | 2Δ에 즉시 알 수 있는 최소 집합. HardCommit subDAG에 나머지 tx가 추가로 있어 불완전한 투기 실행 |
-| **B. 전체 subDAG tx** | 리더 확정 시 인과 히스토리 전체가 결정적이므로 이론적으로 가능. HardCommit과 tx 집합 일치 → 진정한 투기 실행 |
+리더 블록 tx만(리더 단독) 이 아니라 **리더의 전체 causal subDAG tx**다.
 
-Mysticeti 설계 의도는 **B**이며, `ConsensusNode`가 `dag_state: Arc<RwLock<DagState>>`를
-`#[allow(dead_code)]`로 보유하고 있는 것이 B 구현을 위한 준비 흔적이다.
+투표 블록(round R+1)이 리더(round R)를 참조했다는 사실 자체가
+"리더의 인과 조상 전체가 이미 로컬 DAG에 수신 완료"임을 의미한다.
+DAG 프로토콜은 조상이 없는 블록의 accept를 허용하지 않으므로,
+2Δ 시점에 Linearizer가 3Δ에 commit할 subDAG를 동일하게 미리 계산할 수 있다.
+
+`ConsensusNode.dag_state`가 `#[allow(dead_code)]`로 보유되어 있는 것은 이 구현을 위한 준비 흔적이다.
 
 ### 3. Phase 5에서 해결해야 할 구체적 작업
 
 | 작업 | 관련 파일 |
 |------|----------|
-| A vs B 설계 결정 확정 | 설계 문서 |
 | `VerifiedBlock` / `TestBlock`에 `txs: Vec<EthSignedTx>` 페이로드 추가 | `crates/consensus/src/types.rs` |
-| `check_soft_commit()`에서 `dag_state`를 통해 subDAG tx 수집 | `crates/consensus/src/node.rs` |
+| `check_soft_commit()`에서 `dag_state`를 통해 리더 causal subDAG tx 수집 | `crates/consensus/src/node.rs` |
 | `to_shared_subdag()`에서 각 블록 tx 채우기 | `crates/consensus/src/node.rs` |
 | scheduler 통합 테스트에서 실제 tx 흐름 검증 | `crates/testkit` or `crates/node` |
