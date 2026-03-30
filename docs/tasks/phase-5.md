@@ -1,112 +1,134 @@
 # Phase 5: 통합 & 벤치마크
 
 **상태**: ⏳ 대기
-**목표**: 모든 컴포넌트를 `crates/node`에서 통합하여 완전한 파이프라인을 구성하고, 이론적 성능 이득(`min(Δ, E)`)을 실측으로 검증한다.
+**목표**: tx 페이로드 배선 완성 → Mock 실행기로 E2E 통합 테스트 → 실제 REVM 연결 후 `min(Δ, E)` 이득을 수치로 검증한다.
+
+Docker 멀티노드 환경 구축 및 Foundry 컨트랙트 테스트는 **Phase 6**으로 분리.
 
 ---
 
 ## Phase 4 이월 과제 (선결 조건)
 
 > 아래 항목들은 Phase 4 완료 후 발견된 미완성 사항이다.
-> **통합 테스트 및 벤치마크 작업을 시작하기 전에 반드시 해결해야 한다.**
+> **5-A에서 가장 먼저 해결한다.**
 
-### 과제 1 — SoftCommit tx 범위: 리더의 전체 causal subDAG
+### 과제 1 — `to_shared_subdag()` tx 채우기
 
-현재 `ConsensusEvent::SoftCommit.txs`와 `OurVerifiedBlock.txs`가 모두 `vec![]` stub이다.
-
-**범위는 리더의 전체 causal subDAG tx** — 리더 블록 단독이 아니다.
-
-근거: 투표 블록(round R+1)이 리더(round R)를 참조했다는 사실 자체가
-"리더의 인과 조상 전체가 이미 로컬 DAG에 수신 완료"임을 의미한다.
-DAG 프로토콜은 조상이 없는 블록의 accept를 허용하지 않기 때문이다.
-따라서 2Δ 시점에 Linearizer가 3Δ에 commit할 subDAG를 동일하게 미리 계산할 수 있고,
-이것이 HardCommit 결과와 tx 집합이 일치하는 유일한 방법이다.
-
-`ConsensusNode.dag_state`가 `#[allow(dead_code)]`로 보유되어 있는 것은 이 구현을 위한 준비 흔적이다.
-
-### 과제 2 — consensus `VerifiedBlock`에 tx 페이로드 추가
-
-`crates/consensus/src/types.rs`의 `VerifiedBlock` 및 `TestBlock`에 tx 페이로드가 없다.
-
-```
-// 현재
-VerifiedBlock { round, author, digest, ancestors, timestamp_ms }
-
-// 필요
-VerifiedBlock { round, author, digest, ancestors, timestamp_ms, txs: Vec<EthSignedTx> }
-```
-
-이를 추가해야 `node.rs`의 두 stub(`check_soft_commit`, `to_shared_subdag`)을 실제 구현으로 교체할 수 있다.
-
-### 과제 3 — `check_soft_commit()` 구현 (선택 A 또는 B에 따라)
+`VerifiedBlock.transactions()` API는 이미 존재한다 (`&[Transaction]`).
+`Transaction(Vec<u8>)` → `EthSignedTx(Vec<u8>)` 변환 1줄만 추가하면 된다.
 
 ```rust
-// 현재 (node.rs:153)
-ConsensusEvent::SoftCommit { txs: vec![], .. }
+// crates/consensus/src/node.rs — to_shared_subdag()
+// 현재
+OurVerifiedBlock { txs: vec![], .. }
+// 수정
+OurVerifiedBlock { txs: b.transactions().iter().map(|t| EthSignedTx(t.0.clone())).collect(), .. }
+```
 
-// B 선택 시: dag_state를 순회해 리더 인과 히스토리 전체 tx 수집
-let txs = collect_subdag_txs(&self.dag_state, leader_ref, last_committed_round);
+### 과제 2 — `check_soft_commit()` causal subDAG tx 수집
+
+리더의 전체 causal subDAG tx를 2Δ 시점에 수집해야 한다.
+`Linearizer::linearize_sub_dag()`와 동일한 DFS이되, `set_committed()` 호출이 없는 **read-only** 버전이 필요하다.
+`ConsensusNode.dag_state`가 `#[allow(dead_code)]`로 보유된 것이 이 구현을 위한 준비 흔적이다.
+
+```rust
+// crates/consensus/src/node.rs — check_soft_commit()
+// 현재
+ConsensusEvent::SoftCommit { txs: vec![], .. }
+// 수정: dag_state read lock으로 causal cone 순회
+let txs = collect_causal_txs(&self.dag_state.read(), leader_ref, dag_state.last_committed_round());
 ConsensusEvent::SoftCommit { txs, .. }
 ```
 
-### 과제 4 — `to_shared_subdag()` tx 채우기
+### 과제 3 — `TestBlock`에 tx 주입 메서드 추가
+
+통합 테스트에서 tx 페이로드를 담은 블록을 만들 수 있어야 한다.
 
 ```rust
-// 현재 (node.rs:207)
-OurVerifiedBlock { txs: vec![], .. }
-
-// 수정 후
-OurVerifiedBlock { txs: b.txs().to_vec(), .. }
+// crates/consensus/src/types.rs
+impl TestBlock {
+    pub fn set_transactions(mut self, txs: Vec<Transaction>) -> Self { .. }
+}
 ```
 
 ---
 
-## 작업 목록
+## 서브페이즈 구성
 
-### 통합 (`crates/node`)
-- [ ] 전체 컴포넌트 초기화 및 연결
-- [ ] 채널 배선 (consensus → scheduler → executor → wrapper)
-- [ ] 노드 시작/종료 라이프사이클 구현
-- [ ] 설정 파일 구조 설계 (밸리데이터 수, 네트워크 지연 등)
+```
+5-A  tx 페이로드 배선     ── 이월 과제 1·2·3 해결
+5-B  실행 레이어 Mock     ── MockExecutor + node 배관
+5-C  E2E 통합 테스트      ── 결정론적 시뮬레이터 기반
+5-D  실제 REVM + 벤치마크 ── ParallelExecutor 구현 + 수치 검증
+```
 
-### 통합 테스트 (결정론적 시뮬레이터 기반)
-- [ ] End-to-end: 트랜잭션 제출 → 합의 → 실행 → 확정 전체 흐름
-- [ ] 결정론적 시뮬레이터에서 N노드 (3~4) 전체 파이프라인 검증
-- [ ] 비잔틴 노드 주입 (f=1) 환경에서 정상 동작
-- [ ] 순서 역전(out-of-order) 메시지 주입 시 스케줄러 재정렬 검증
-- [ ] Backpressure 발동 및 해제 시나리오 검증
+---
 
-### 벤치마크 (멀티스레드 실환경 기반)
-- [ ] 벤치마크 환경 구성: 멀티스레드 tokio 런타임, 실제 타이밍 측정
-- [ ] Δ 주입 방법 구현: 채널 전송에 `tokio::time::sleep` 기반 지연 삽입
-- [ ] 기준 모델 구현: 3Δ 대기 후 직렬 실행
-- [ ] 제안 모델: 2Δ 낙관적 병렬 실행
-- [ ] 측정 항목:
-  - 체감 완료 시간 (Latency) — `max(3Δ, 2Δ+E)` vs `3Δ+E`
-  - 최대 처리량 (Max TPS)
-  - 충돌률별 성능 곡선 (`E_retry` 증가에 따른 상대적 우위 유지 확인)
+## 5-A: tx 페이로드 배선
 
-### Docker 멀티노드 검증 환경 구축
-- [ ] `Dockerfile` 작성 — `crates/node` 바이너리 컨테이너화
-- [ ] `docker/compose.yml` 작성 — N개 밸리데이터 노드 구성 (기본 4노드, f=1)
-- [ ] 노드 간 네트워크 설정 (Docker bridge network, 포트 매핑)
-- [ ] 합의 진행 상태 모니터링 스크립트 — 라운드 진행, HardCommit 발생 여부 로그 확인
-- [ ] 장애 주입 시나리오:
-  - [ ] 노드 1개 강제 종료 후 합의 지속 여부 확인
-  - [ ] 네트워크 지연 주입 (`tc netem` 또는 `toxiproxy`) 후 동작 확인
-- [ ] `docker/README.md` — 로컬에서 멀티노드 환경 실행 방법
+| 순번 | 파일 | 작업 |
+|------|------|------|
+| 1 | `consensus/src/node.rs` | `to_shared_subdag()` — `b.transactions()` → `EthSignedTx` 변환 |
+| 2 | `consensus/src/dag_state.rs` | `get_causal_blocks(leader_ref, gc_round)` — read-only causal DFS 추가 |
+| 3 | `consensus/src/node.rs` | `check_soft_commit()` — causal tx 수집 후 `SoftCommit.txs` 채우기 |
+| 4 | `consensus/src/types.rs` | `TestBlock::set_transactions()` 추가 |
+| 5 | `consensus/src/node.rs` | 기존 7개 테스트에서 tx 페이로드 흐름 검증 추가 |
 
-### 컨트랙트 테스트 환경 구성 (Foundry)
-- [ ] Foundry 설치 및 `contracts/` 디렉토리 구성
-- [ ] Docker 테스트넷에 연결하는 Foundry 설정 (`foundry.toml`, RPC endpoint)
-- [ ] 기본 테스트 컨트랙트 작성 (단순 상태 읽기/쓰기, 이벤트 발생)
-- [ ] `forge test` — 컨트랙트 단위 테스트
-- [ ] `cast send` — 실제 테스트넷에 트랜잭션 전송 및 실행 확인
-- [ ] 병렬 실행 검증용 컨트랙트: 동일 상태를 쓰는 트랜잭션 다수 전송 → 충돌 처리 확인
+**완료 기준**: `cargo test -p consensus` 7/7 유지, `SoftCommit.txs`와 `HardCommit subdag.blocks[*].txs` 모두 비어있지 않음.
 
-### 문서화
-- [ ] `docs/benchmark-results.md` — 벤치마크 결과 기록
-- [ ] `README.md` 업데이트 — 설치/실행 가이드 완성 (Docker 실행 + Foundry 포함)
+---
+
+## 5-B: 실행 레이어 Mock + node 배관
+
+| 순번 | 파일 | 작업 |
+|------|------|------|
+| 1 | `parallel-evm/src/lib.rs` | `MockExecutor` — `TxBatch` 수신 즉시 `RoundExecutionResult` 반환 (실제 REVM 없음) |
+| 2 | `parallel-evm/src/lib.rs` | `MockCommitWrapper` — commit/discard 이벤트 로그만 기록 |
+| 3 | `node/src/lib.rs` | `Node::start()` — `ConsensusNode` + `PipelineScheduler` + `MockExecutor` 채널 배선 |
+| 4 | `node/src/lib.rs` | `NodeConfig::from_env()` — committee_size, node_index 최소 구현 |
+
+**채널 배선 확인:**
+```
+ConsensusNode ──broadcast──▶ PipelineScheduler ──mpsc──▶ MockExecutor
+                                    ▲ CommitDecision           │ RoundExecutionResult
+                                    └──────────────────────────┘
+                                    ◀── BackpressureSignal ────┘
+```
+
+---
+
+## 5-C: E2E 통합 테스트
+
+`crates/testkit` + `crates/node` 기반. `tokio::time::pause()` 활용 결정론적 실행.
+
+| 테스트 | 시나리오 | 검증 항목 |
+|--------|---------|----------|
+| `test_e2e_single_round` | 4노드, R3 wave 1회 | `SoftCommit` → `TxBatch(is_optimistic=true)` → `HardCommit` → `CommitDecision::Commit` |
+| `test_e2e_multi_round` | 연속 3 wave (R3·R6·R9) | `commit_index` 1·2·3 오름차순, `TxBatch` 누락 없음 |
+| `test_e2e_soft_hard_tx_match` | tx 페이로드 있는 블록 | `SoftCommit.txs` == `HardCommit subdag` 전체 tx |
+| `test_e2e_out_of_order` | SoftCommit R6 → R3 역순 도착 | executor 수신 순서 R3 → R6 |
+| `test_e2e_backpressure` | MockExecutor 응답 지연 주입 | `SlowDown` 발송 → 큐 감소 후 `Resume` |
+| `test_e2e_byzantine_f1` | 4노드 f=1, node-0 블록 없음 | HardCommit 정상 도달 |
+
+---
+
+## 5-D: 실제 REVM + 벤치마크
+
+| 순번 | 작업 | 내용 |
+|------|------|------|
+| 1 | `ParallelExecutor` 구현 | `ShadowDb` + REVM 연결, read/write set 추적 |
+| 2 | `BenchmarkHarness` 구현 | `CommitTimestamps` 기록, `measure_pipeline_gain()` 완성 |
+| 3 | 기준 모델 구현 | `3Δ` 대기 후 직렬 실행 경로 |
+| 4 | 지연 주입 | `tokio::time::sleep` 기반 Δ 시뮬레이션 |
+| 5 | `docs/benchmark-results.md` | 측정 결과 기록 |
+
+**벤치마크 검증 기준:**
+
+| 측정 항목 | 기대 결과 |
+|----------|----------|
+| `optimistic_latency` vs `baseline_latency` | optimistic < baseline (모든 충돌률 구간) |
+| 충돌률 0% | 이득 = `min(Δ, E)` |
+| 충돌률 100% | 이득 > 0 (수학적 하한 유지) |
 
 ---
 
@@ -118,44 +140,33 @@ OurVerifiedBlock { txs: b.txs().to_vec(), .. }
 
 ## 완료 기준 (Done Criteria)
 
-1. `cargo test` (전체) 통과 — 결정론적 시뮬레이터 기반 통합 테스트 포함
-2. End-to-end 통합 테스트 통과 (비잔틴, 순서 역전, Backpressure 시나리오 포함)
-3. 벤치마크(멀티스레드 실환경)에서 제안 모델이 기준 모델 대비 `min(Δ, E)` 이상의 지연 시간 단축 측정
-4. 충돌률 증가 시에도 제안 모델의 상대적 우위가 유지됨을 수치로 확인
-5. Docker 멀티노드 환경에서 4노드 합의가 정상 진행되고, 노드 1개 중단 시에도 합의가 지속된다
-6. Foundry로 테스트넷에 컨트랙트를 배포하고 트랜잭션이 정상 실행 및 확정된다
-7. README.md에 실행 가이드가 완성되어 있다 (Docker 실행 + Foundry 포함)
+1. `cargo test` (전체) 통과 — E2E 통합 테스트 6개 포함
+2. `SoftCommit.txs`와 `HardCommit subdag.blocks[*].txs`가 일치함을 테스트로 확인
+3. 벤치마크에서 제안 모델이 기준 모델 대비 `min(Δ, E)` 이상 지연 단축 측정
+4. 충돌률 증가 시에도 제안 모델의 상대적 우위가 수치로 유지됨
+5. `docs/benchmark-results.md` 작성 완료
 
 ---
 
-## 테스트 기준
+## 테스트 목록
 
 ```
 cargo test
 cargo bench
 ```
 
-**통합 테스트 (결정론적 시뮬레이터)**
-- [ ] `test_e2e_single_round` — 단일 라운드 전체 파이프라인 정상 동작
-- [ ] `test_e2e_multi_round` — 연속 라운드 처리 (큐 연속성)
-- [ ] `test_e2e_conflict_recovery` — 충돌 발생 후 재실행 및 정상 확정
-- [ ] `test_e2e_byzantine_f1` — f=1 비잔틴 노드 주입 후 정상 확정
-- [ ] `test_e2e_out_of_order` — 순서 역전 메시지 시나리오
-- [ ] `test_e2e_backpressure` — 큐 과부하 시 Backpressure 발동 및 해제
+**5-A (tx 페이로드)**
+- [ ] `cargo test -p consensus` 7/7 유지 + tx 흐름 검증
 
-**벤치마크 (멀티스레드 실환경)**
-- [ ] `bench_baseline` — 기준 모델(3Δ 직렬) Latency / TPS 측정
-- [ ] `bench_optimistic` — 제안 모델(2Δ 병렬) Latency / TPS 측정
-- [ ] `bench_conflict_sweep` — 충돌률 0%~100% 구간별 양 모델 Latency 비교
-- [ ] 결과 검증: `optimistic_latency < baseline_latency` (모든 충돌률 구간에서)
+**5-C (E2E 통합)**
+- [ ] `test_e2e_single_round`
+- [ ] `test_e2e_multi_round`
+- [ ] `test_e2e_soft_hard_tx_match`
+- [ ] `test_e2e_out_of_order`
+- [ ] `test_e2e_backpressure`
+- [ ] `test_e2e_byzantine_f1`
 
-**Docker 멀티노드 검증**
-- [ ] `docker compose up` 으로 4노드 클러스터 정상 기동
-- [ ] 합의 라운드가 지속적으로 진행됨 (로그/모니터링 확인)
-- [ ] 노드 1개 `docker stop` 후 나머지 3노드에서 합의 지속 (f=1 내성)
-- [ ] 네트워크 지연 주입 후 합의 완료까지 시간 측정
-
-**컨트랙트 테스트 (Foundry)**
-- [ ] 테스트 컨트랙트 배포 및 `cast send`로 트랜잭션 전송
-- [ ] 동일 상태를 쓰는 트랜잭션 다수 전송 → 병렬 실행 충돌 처리 확인
-- [ ] `forge test` 전체 통과
+**5-D (벤치마크)**
+- [ ] `bench_baseline`
+- [ ] `bench_optimistic`
+- [ ] `bench_conflict_sweep`

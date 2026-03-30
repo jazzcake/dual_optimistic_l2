@@ -11,6 +11,7 @@
 | 3-B | SoftCommit + 시뮬레이터 + 테스트 | ✅ 완료 | [phase-3.md](phase-3.md) |
 | 4 | 낙관적 파이프라인 스케줄러 구현 | ✅ 완료 | [phase-4.md](phase-4.md) |
 | 5 | 통합 & 벤치마크 | ⏳ 대기 | [phase-5.md](phase-5.md) |
+| 6 | Docker 멀티노드 검증 & Foundry 컨트랙트 테스트 | ⏳ 대기 | [phase-6.md](phase-6.md) |
 
 ---
 
