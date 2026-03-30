@@ -1821,6 +1821,7 @@ name = "testkit"
 version = "0.1.0"
 dependencies = [
  "consensus",
+ "node",
  "shared",
  "tokio",
 ]

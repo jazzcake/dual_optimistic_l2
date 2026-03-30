@@ -1,6 +1,6 @@
 # Phase 5: 통합 & 벤치마크
 
-**상태**: ⏳ 대기
+**상태**: ✅ 완료
 **목표**: tx 페이로드 배선 완성 → Mock 실행기로 E2E 통합 테스트 → 실제 REVM 연결 후 `min(Δ, E)` 이득을 수치로 검증한다.
 
 Docker 멀티노드 환경 구축 및 Foundry 컨트랙트 테스트는 **Phase 6**으로 분리.
@@ -156,17 +156,17 @@ cargo bench
 ```
 
 **5-A (tx 페이로드)**
-- [ ] `cargo test -p consensus` 7/7 유지 + tx 흐름 검증
+- [x] `cargo test -p consensus` 8/8 통과 + tx 흐름 검증 (`test_tx_payload_flow` 추가)
 
 **5-C (E2E 통합)**
-- [ ] `test_e2e_single_round`
-- [ ] `test_e2e_multi_round`
-- [ ] `test_e2e_soft_hard_tx_match`
-- [ ] `test_e2e_out_of_order`
-- [ ] `test_e2e_backpressure`
-- [ ] `test_e2e_byzantine_f1`
+- [x] `test_e2e_single_round`
+- [x] `test_e2e_multi_round`
+- [x] `test_e2e_soft_hard_tx_match`
+- [x] `test_e2e_out_of_order`
+- [x] `test_e2e_backpressure`
+- [x] `test_e2e_byzantine_f1`
 
 **5-D (벤치마크)**
-- [ ] `bench_baseline`
-- [ ] `bench_optimistic`
-- [ ] `bench_conflict_sweep`
+- [x] `bench_baseline`
+- [x] `bench_optimistic_faster_than_baseline`
+- [x] `bench_conflict_sweep`

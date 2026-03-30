@@ -10,3 +10,6 @@ scheduler = { workspace = true }
 shadow-state = { workspace = true }
 parallel-evm = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use parking_lot::RwLock;
 use tokio::sync::broadcast;
 
-use shared::{ConsensusEvent, OurCommittedSubDag, OurVerifiedBlock};
+use shared::{ConsensusEvent, EthSignedTx, OurCommittedSubDag, OurVerifiedBlock};
 
 use crate::{
     block_manager::BlockManager,
@@ -150,10 +150,24 @@ impl ConsensusNode {
                     .soft_commit
                     .add_vote(*ancestor, voter, &self.context.committee)
                 {
+                    let txs = {
+                        let state = self.dag_state.read();
+                        let gc_round = state.gc_round();
+                        state
+                            .get_causal_blocks(ancestor, gc_round)
+                            .into_iter()
+                            .flat_map(|b| {
+                                b.transactions()
+                                    .iter()
+                                    .map(|t| EthSignedTx(t.0.clone()))
+                                    .collect::<Vec<_>>()
+                            })
+                            .collect()
+                    };
                     let _ = self.event_tx.send(ConsensusEvent::SoftCommit {
                         round: potential_leader_round as shared::Round,
                         leader: to_shared_block_ref(ancestor),
-                        txs: vec![],
+                        txs,
                     });
                 }
             }
@@ -209,7 +223,11 @@ fn to_shared_subdag(subdag: &CommittedSubDag) -> OurCommittedSubDag {
             .iter()
             .map(|b| OurVerifiedBlock {
                 block_ref: to_shared_block_ref(&b.reference()),
-                txs: vec![],
+                txs: b
+                    .transactions()
+                    .iter()
+                    .map(|t| EthSignedTx(t.0.clone()))
+                    .collect(),
             })
             .collect(),
         timestamp_ms: subdag.timestamp_ms,
@@ -607,5 +625,119 @@ mod tests {
             run1, run2,
             "two identical simulations must produce identical event sequences"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // test_tx_payload_flow
+    // -----------------------------------------------------------------------
+
+    /// Verify that transaction payloads injected into blocks propagate correctly
+    /// through both the SoftCommit and HardCommit paths.
+    ///
+    /// Setup: 4 nodes, wave-1 leader = node 3 at round 3.
+    /// Blocks in rounds 1-3 carry distinct single-byte tx payloads so we can
+    /// count them.  After receiving round-5 blocks:
+    ///  - SoftCommit.txs must be non-empty (causal subDAG of the leader).
+    ///  - HardCommit subdag.blocks[*].txs must together contain all injected txs.
+    #[test]
+    fn test_tx_payload_flow() {
+        use crate::types::Transaction;
+
+        let n = 4;
+        let committee = make_test_committee(0, n);
+        let context = Arc::new(Context::new(AuthorityIndex::new_for_test(0), committee));
+        let (mut node, mut rx) = ConsensusNode::new(context);
+
+        let g = genesis_refs(n);
+
+        // Helper: build a round where each block carries one tx whose payload is
+        // [round as u8, author as u8] — unique per block.
+        let build_tx_round = |round: u32, authors: &[u32], prev: &[BlockRef]| {
+            authors
+                .iter()
+                .map(|&a| {
+                    TestBlock::new(round, a)
+                        .set_ancestors(prev.to_vec())
+                        .set_transactions(vec![Transaction(vec![round as u8, a as u8])])
+                        .build()
+                })
+                .collect::<Vec<VerifiedBlock>>()
+        };
+
+        let r1 = build_tx_round(1, &[0, 1, 2, 3], &g);
+        let r1_refs: Vec<BlockRef> = r1.iter().map(|b| b.reference()).collect();
+        node.accept_blocks(r1);
+
+        let r2 = build_tx_round(2, &[0, 1, 2, 3], &r1_refs);
+        let r2_refs: Vec<BlockRef> = r2.iter().map(|b| b.reference()).collect();
+        node.accept_blocks(r2);
+
+        // Round 3 — leader round (node 3 is the wave-1 leader).
+        let r3 = build_tx_round(3, &[0, 1, 2, 3], &r2_refs);
+        let r3_refs: Vec<BlockRef> = r3.iter().map(|b| b.reference()).collect();
+        node.accept_blocks(r3);
+
+        // Round 4 — voting round; 2f+1 = 3 votes trigger SoftCommit.
+        let r4 = build_tx_round(4, &[0, 1, 2], &r3_refs);
+        let r4_refs: Vec<BlockRef> = r4.iter().map(|b| b.reference()).collect();
+        node.accept_blocks(r4);
+
+        let after_r4 = drain(&mut rx);
+        let soft = after_r4
+            .iter()
+            .find(|e| matches!(e, ConsensusEvent::SoftCommit { .. }))
+            .expect("SoftCommit must be emitted after 2f+1 votes");
+
+        // SoftCommit must carry the causal subDAG txs (rounds 1-3, all 4 nodes).
+        match soft {
+            ConsensusEvent::SoftCommit { txs, .. } => {
+                assert!(
+                    !txs.is_empty(),
+                    "SoftCommit.txs must not be empty when blocks carry transactions"
+                );
+                // Causal cone of leader (R3-node3):
+                //   R3: 1 block  (only the leader itself)
+                //   R2: 4 blocks (leader references all 4 R2 blocks)
+                //   R1: 4 blocks (each R2 block references all 4 R1 blocks)
+                // = 9 txs total.  R3 blocks of nodes 0-2 are NOT in the leader's cone.
+                assert_eq!(
+                    txs.len(),
+                    9,
+                    "SoftCommit should contain 9 causal txs (1+4+4 from rounds 3,2,1)"
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // Round 5 — decision round; triggers HardCommit.
+        let r4_all = build_tx_round(4, &[3], &r3_refs); // 4th node's round-4 block
+        let r4_all_refs: Vec<BlockRef> = r4_all.iter().map(|b| b.reference()).collect();
+        node.accept_blocks(r4_all);
+
+        // Merge round-4 refs for round-5 ancestors.
+        let mut all_r4_refs = r4_refs.clone();
+        all_r4_refs.extend(r4_all_refs);
+
+        let r5 = build_tx_round(5, &[0, 1, 2, 3], &all_r4_refs);
+        node.accept_blocks(r5);
+
+        let after_r5 = drain(&mut rx);
+        let hard = after_r5
+            .iter()
+            .find(|e| matches!(e, ConsensusEvent::HardCommit { .. }))
+            .expect("HardCommit must be emitted at decision round 5");
+
+        // Every block in the committed subDAG must expose its txs.
+        match hard {
+            ConsensusEvent::HardCommit { subdag } => {
+                let total_hard_txs: usize =
+                    subdag.blocks.iter().map(|b| b.txs.len()).sum();
+                assert!(
+                    total_hard_txs > 0,
+                    "HardCommit subdag blocks must carry transactions"
+                );
+            }
+            _ => unreachable!(),
+        }
     }
 }

@@ -7,3 +7,7 @@ edition.workspace = true
 shared = { workspace = true }
 consensus = { workspace = true }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "test-util"] }
+node = { path = "../node" }

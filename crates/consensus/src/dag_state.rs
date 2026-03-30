@@ -250,6 +250,55 @@ impl DagState {
         0
     }
 
+    /// Read-only causal traversal anchored at `leader_ref`.
+    ///
+    /// Returns all blocks in the causal cone of `leader_ref` that are above
+    /// `gc_round` and have not yet been committed, in DFS pop order (unspecified
+    /// but deterministic for a given DAG state).  Does **not** mutate the
+    /// `committed` set — this is the read-only counterpart of
+    /// `Linearizer::linearize_sub_dag`.
+    ///
+    /// Returns an empty vec if the leader block is not found or is already committed.
+    pub(crate) fn get_causal_blocks(
+        &self,
+        leader_ref: &BlockRef,
+        gc_round: Round,
+    ) -> Vec<VerifiedBlock> {
+        debug_assert!(
+            leader_ref.round > gc_round,
+            "leader round {} must be above gc_round {}",
+            leader_ref.round,
+            gc_round
+        );
+
+        let Some(leader) = self.get_block(leader_ref) else {
+            return vec![];
+        };
+        if self.is_committed(leader_ref) {
+            return vec![];
+        }
+
+        let mut stack = vec![leader];
+        let mut visited = HashSet::new();
+        visited.insert(*leader_ref);
+        let mut result = Vec::new();
+
+        while let Some(block) = stack.pop() {
+            result.push(block.clone());
+            for ancestor_ref in block.ancestors() {
+                if ancestor_ref.round > gc_round
+                    && !self.is_committed(ancestor_ref)
+                    && visited.insert(*ancestor_ref)
+                {
+                    if let Some(ancestor_block) = self.get_block(ancestor_ref) {
+                        stack.push(ancestor_block);
+                    }
+                }
+            }
+        }
+        result
+    }
+
     pub fn committee(&self) -> &Arc<crate::committee::Committee> {
         &self.context.committee
     }

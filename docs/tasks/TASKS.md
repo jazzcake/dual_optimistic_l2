@@ -1,6 +1,6 @@
 # 전체 업무 목록 (Master Task List)
 
-## 현재 Phase: **Phase 4 완료 → Phase 5 대기**
+## 현재 Phase: **Phase 5 완료 → Phase 6 대기**
 
 | Phase | 제목 | 상태 | 문서 |
 |-------|------|------|------|
@@ -10,7 +10,7 @@
 | 3-A | Mysticeti 코드 추출 + 독립 빌드 | ✅ 완료 | [phase-3.md](phase-3.md) |
 | 3-B | SoftCommit + 시뮬레이터 + 테스트 | ✅ 완료 | [phase-3.md](phase-3.md) |
 | 4 | 낙관적 파이프라인 스케줄러 구현 | ✅ 완료 | [phase-4.md](phase-4.md) |
-| 5 | 통합 & 벤치마크 | ⏳ 대기 | [phase-5.md](phase-5.md) |
+| 5 | 통합 & 벤치마크 | ✅ 완료 | [phase-5.md](phase-5.md) |
 | 6 | Docker 멀티노드 검증 & Foundry 컨트랙트 테스트 | ⏳ 대기 | [phase-6.md](phase-6.md) |
 
 ---
